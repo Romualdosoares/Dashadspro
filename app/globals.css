@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #050505;
+  --foreground: #ffffff;
+  --neon: #39FF14;
+  --neon-dim: #2bcc10;
+  --neon-glow: rgba(57, 255, 20, 0.15);
+  --neon-glow-strong: rgba(57, 255, 20, 0.3);
+  --surface: #0a0a0a;
+  --surface-hover: #111111;
+  --border: #1a1a1a;
+  --border-hover: #2a2a2a;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  background: #050505;
+  color: #ffffff;
+  font-family: 'Fira Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, Cantarell, sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1a1a1a;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #39FF14;
+}
+
+/* Neon glow utilities */
+.neon-text {
+  text-shadow: 0 0 7px rgba(57, 255, 20, 0.5), 0 0 20px rgba(57, 255, 20, 0.2);
+}
+
+.neon-box {
+  box-shadow: 0 0 10px rgba(57, 255, 20, 0.1), inset 0 0 10px rgba(57, 255, 20, 0.03);
+}
+
+.neon-border {
+  border-color: rgba(57, 255, 20, 0.2);
+}

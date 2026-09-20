@@ -1,0 +1,12 @@
+{
+  "framework": "nextjs",
+  "github": {
+    "enabled": false
+  },
+  "crons": [
+    {
+      "path": "/api/cron/whatsapp-report",
+      "schedule": "0 * * * *"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+node_modules/
+.next/
+dist/
+build/
+.env
+.env.local
+.env.*.local
+facebook_tokens.csv
+Usuario e senha admin.txt
+.claude/
+.claude-plugin/
+*.log
+.DS_Store
+Thumbs.db
+tsconfig.tsbuildinfo
+
+.vercel
