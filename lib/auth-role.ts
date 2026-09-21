@@ -1,12 +1,19 @@
 export type PlatformRole = "admin" | "user";
 
-type UserMetadata = { role?: unknown };
-
 export type RoleUser = {
-  app_metadata?: UserMetadata | null;
-  user_metadata?: UserMetadata | null;
+  app_metadata?: unknown;
+  user_metadata?: unknown;
 };
 
 export function getPlatformRole(user: RoleUser): PlatformRole {
-  return user.app_metadata?.role === "admin" ? "admin" : "user";
+  if (
+    typeof user.app_metadata === "object" &&
+    user.app_metadata !== null &&
+    "role" in user.app_metadata &&
+    user.app_metadata.role === "admin"
+  ) {
+    return "admin";
+  }
+
+  return "user";
 }
