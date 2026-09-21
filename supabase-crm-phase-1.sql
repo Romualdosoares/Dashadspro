@@ -239,23 +239,21 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  owner_organization_id uuid;
+  resolved_organization_id uuid;
 BEGIN
-  IF NEW.organization_id IS NULL THEN
-    SELECT organization_id
-      INTO owner_organization_id
-      FROM public.organization_memberships
-      WHERE user_id = NEW.user_id
-        AND role = 'owner'
-      ORDER BY created_at ASC
-      LIMIT 1;
+  SELECT organization_id
+    INTO resolved_organization_id
+    FROM public.organization_memberships
+    WHERE user_id = NEW.user_id
+      AND role = 'owner'
+    ORDER BY created_at ASC
+    LIMIT 1;
 
-    IF owner_organization_id IS NULL THEN
-      RAISE EXCEPTION 'Cannot assign organization for user %: no owner membership found', NEW.user_id;
-    END IF;
-
-    NEW.organization_id := owner_organization_id;
+  IF resolved_organization_id IS NULL THEN
+    RAISE EXCEPTION 'Cannot assign organization for user %: no owner membership found', NEW.user_id;
   END IF;
+
+  NEW.organization_id := resolved_organization_id;
 
   RETURN NEW;
 END;

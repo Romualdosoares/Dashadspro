@@ -73,6 +73,12 @@ describe("CRM Phase 1 schema migration", () => {
     expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.assign_organization_to_user_owned_data\(\)[\s\S]*SECURITY DEFINER[\s\S]*SET search_path = public/i);
     expect(sql).toMatch(/CREATE TRIGGER assign_facebook_tokens_organization\s+BEFORE INSERT OR UPDATE OF user_id, organization_id ON public\.facebook_tokens/i);
     expect(sql).toMatch(/CREATE TRIGGER assign_ad_accounts_organization\s+BEFORE INSERT OR UPDATE OF user_id, organization_id ON public\.ad_accounts/i);
+    const metaOrganizationTriggerBody = sql.match(
+      /CREATE OR REPLACE FUNCTION public\.assign_organization_to_user_owned_data\([\s\S]*?AS \$\$([\s\S]*?)\$\$;/i,
+    )?.[1];
+    expect(metaOrganizationTriggerBody).toBeDefined();
+    expect(metaOrganizationTriggerBody).toMatch(/NEW\.organization_id := resolved_organization_id;/i);
+    expect(metaOrganizationTriggerBody).not.toMatch(/IF NEW\.organization_id IS NULL THEN/i);
     expect(sql).toMatch(/ALTER TABLE public\.facebook_tokens\s+ALTER COLUMN organization_id SET NOT NULL/i);
     expect(sql).toMatch(/ALTER TABLE public\.ad_accounts\s+ALTER COLUMN organization_id SET NOT NULL/i);
     expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.can_access_organization\(target_organization_id uuid\)/i);
