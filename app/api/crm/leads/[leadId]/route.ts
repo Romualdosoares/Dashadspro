@@ -24,7 +24,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     const body = await request.json().catch(() => null);
     const stageValidation = validateLeadStageUpdate(
-      body && typeof body === "object" ? (body as { stageId?: unknown }).stageId : undefined,
+      body && typeof body === "object" ? (body as { stage_id?: unknown }).stage_id : undefined,
     );
     if (!stageValidation.ok) {
       return NextResponse.json({ error: stageValidation.error }, { status: 400 });

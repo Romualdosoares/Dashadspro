@@ -122,14 +122,29 @@ describe("CRM API routes", () => {
     const response = await getLeads();
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ leads: expect.any(Array) });
+    expect(await response.json()).toEqual({
+      leads: [{
+        id: leadId,
+        contact_id: "contact-1",
+        stage_id: stageId,
+        source: "manual",
+        status: "open",
+        created_at: "2026-09-21T00:00:00.000Z",
+        contact_name: "Maria Silva",
+        contact_phone: "5511988887777",
+        contact_email: null,
+      }],
+    });
     expect(leads.eq).toHaveBeenCalledWith("organization_id", organizationId);
   });
 
   it("creates CRM contact and lead in first organization pipeline stage", async () => {
     const existingContact = query({ data: [], error: null });
     const stages = query({ data: [{ id: stageId }], error: null });
-    const createdContact = query({ data: { id: "contact-1" }, error: null });
+    const createdContact = query({
+      data: { id: "contact-1", name: "Maria Silva", phone: "5511988887777", email: null },
+      error: null,
+    });
     const createdLead = query({ data: { id: leadId, contact_id: "contact-1", stage_id: stageId }, error: null });
     const contactQueries = [existingContact, createdContact];
     const supabase = {
@@ -199,6 +214,70 @@ describe("CRM API routes", () => {
     expect(await response.json()).toEqual({ error: "Pipeline stage required" });
   });
 
+  it("recovers from a concurrent contact insert when matching tenant contact becomes available", async () => {
+    const stages = query({ data: [{ id: stageId }], error: null });
+    const contactLookup = query({ data: [], error: null });
+    const insertConflict = query({ data: null, error: { code: "23505" } });
+    const recoveredContact = query({ data: [{ id: "contact-1", name: "Maria Silva", phone: "5511988887777", email: null }], error: null });
+    const createdLead = query({ data: { id: leadId, contact_id: "contact-1", stage_id: stageId }, error: null });
+    const contactQueries = [contactLookup, insertConflict, recoveredContact];
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === "crm_pipeline_stages") return stages;
+        if (table === "crm_contacts") return contactQueries.shift();
+        if (table === "crm_leads") return createdLead;
+        return undefined;
+      }),
+    };
+    requireActiveOrganization.mockResolvedValue(activeAccess(supabase));
+
+    const response = await createLead(new Request("http://localhost/api/crm/leads", {
+      method: "POST",
+      body: JSON.stringify({ name: "Maria Silva", phone: "(11) 98888-7777", source: "manual" }),
+    }));
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toEqual({
+      lead: { id: leadId, contact_id: "contact-1", stage_id: stageId },
+    });
+    expect(supabase.from).toHaveBeenCalledTimes(5);
+  });
+
+  it("enriches only missing fields on a matching tenant contact", async () => {
+    const stages = query({ data: [{ id: stageId }], error: null });
+    const matchedContact = query({
+      data: [{ id: "contact-1", name: "Maria", phone: "5511988887777", email: null }],
+      error: null,
+    });
+    const unmatchedEmail = query({ data: [], error: null });
+    const enrichedContact = query({ data: null, error: null });
+    const createdLead = query({ data: { id: leadId, contact_id: "contact-1", stage_id: stageId }, error: null });
+    const contactQueries = [matchedContact, unmatchedEmail, enrichedContact];
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === "crm_pipeline_stages") return stages;
+        if (table === "crm_contacts") return contactQueries.shift();
+        if (table === "crm_leads") return createdLead;
+        return undefined;
+      }),
+    };
+    requireActiveOrganization.mockResolvedValue(activeAccess(supabase));
+
+    const response = await createLead(new Request("http://localhost/api/crm/leads", {
+      method: "POST",
+      body: JSON.stringify({
+        name: "Maria Silva",
+        phone: "(11) 98888-7777",
+        email: "maria@example.com",
+        source: "manual",
+      }),
+    }));
+
+    expect(response.status).toBe(201);
+    expect(enrichedContact.update).toHaveBeenCalledWith({ email: "maria@example.com" });
+    expect(enrichedContact.eq).toHaveBeenCalledWith("organization_id", organizationId);
+  });
+
   it("does not update leads when route ID is not a UUID", async () => {
     const from = vi.fn();
     requireActiveOrganization.mockResolvedValue(activeAccess({ from }));
@@ -206,7 +285,7 @@ describe("CRM API routes", () => {
     const response = await updateLead(
       new Request("http://localhost/api/crm/leads/not-a-uuid", {
         method: "PATCH",
-        body: JSON.stringify({ stageId }),
+        body: JSON.stringify({ stage_id: stageId }),
       }),
       { params: Promise.resolve({ leadId: "not-a-uuid" }) },
     );
@@ -230,7 +309,7 @@ describe("CRM API routes", () => {
     const response = await updateLead(
       new Request(`http://localhost/api/crm/leads/${leadId}`, {
         method: "PATCH",
-        body: JSON.stringify({ stageId }),
+        body: JSON.stringify({ stage_id: stageId }),
       }),
       { params: Promise.resolve({ leadId }) },
     );
@@ -249,7 +328,7 @@ describe("CRM API routes", () => {
     const response = await updateLead(
       new Request(`http://localhost/api/crm/leads/${leadId}`, {
         method: "PATCH",
-        body: JSON.stringify({ stageId }),
+        body: JSON.stringify({ stage_id: stageId }),
       }),
       { params: Promise.resolve({ leadId }) },
     );
