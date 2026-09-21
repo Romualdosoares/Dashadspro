@@ -15,3 +15,5 @@ Thumbs.db
 tsconfig.tsbuildinfo
 
 .vercel
+.worktrees/
+.deploy-Dashadspro.tar
