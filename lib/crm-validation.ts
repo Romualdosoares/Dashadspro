@@ -20,7 +20,17 @@ const LEAD_SOURCES = new Set<LeadSource>(["manual", "landing_page", "whatsapp"])
 const BASIC_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RFC4122_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export function validateLeadCreate(input: Record<string, unknown>): LeadCreateValidationResult {
+function isPlainObject(input: unknown): input is Record<string, unknown> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+  const prototype = Object.getPrototypeOf(input);
+  return prototype === Object.prototype || prototype === null;
+}
+
+export function validateLeadCreate(input: unknown): LeadCreateValidationResult {
+  if (!isPlainObject(input)) {
+    return { ok: false, error: "Parametros invalidos" };
+  }
+
   const name = typeof input.name === "string" ? input.name.trim() : "";
   if (name.length < 2 || name.length > 120) {
     return { ok: false, error: "Nome invalido" };

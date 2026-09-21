@@ -2,6 +2,26 @@ import { describe, expect, it } from "vitest";
 import { validateLeadCreate, validateLeadStageUpdate } from "../lib/crm-validation";
 
 describe("validateLeadCreate", () => {
+  it("rejects null input without throwing", () => {
+    expect(validateLeadCreate(null)).toMatchObject({ ok: false });
+  });
+
+  it("rejects array input even when it contains valid lead fields", () => {
+    expect(
+      validateLeadCreate(
+        Object.assign([], {
+          name: "Maria",
+          source: "manual",
+          email: "maria@example.com",
+        }),
+      ),
+    ).toMatchObject({ ok: false });
+  });
+
+  it("rejects primitive input without throwing", () => {
+    expect(validateLeadCreate("Maria")).toMatchObject({ ok: false });
+  });
+
   it("normalizes a valid WhatsApp phone number", () => {
     expect(
       validateLeadCreate({
