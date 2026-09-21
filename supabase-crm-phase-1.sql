@@ -8,7 +8,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE IF NOT EXISTS public.organizations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL CHECK (char_length(name) BETWEEN 2 AND 120),
-  slug text NOT NULL UNIQUE CHECK (slug = lower(slug) AND char_length(slug) BETWEEN 3 AND 80),
+  slug text NOT NULL UNIQUE CHECK (slug ~ '^[a-z0-9-]{3,80}$'),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -128,6 +128,8 @@ DECLARE
   personal_organization_id uuid;
   personal_name text;
 BEGIN
+  PERFORM pg_advisory_xact_lock(hashtextextended(target_user_id::text, 0));
+
   SELECT organization_id
     INTO personal_organization_id
     FROM public.organization_memberships
@@ -230,6 +232,52 @@ SET organization_id = (
 )
 WHERE ad_account.organization_id IS NULL;
 
+CREATE OR REPLACE FUNCTION public.assign_organization_to_user_owned_data()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  owner_organization_id uuid;
+BEGIN
+  IF NEW.organization_id IS NULL THEN
+    SELECT organization_id
+      INTO owner_organization_id
+      FROM public.organization_memberships
+      WHERE user_id = NEW.user_id
+        AND role = 'owner'
+      ORDER BY created_at ASC
+      LIMIT 1;
+
+    IF owner_organization_id IS NULL THEN
+      RAISE EXCEPTION 'Cannot assign organization for user %: no owner membership found', NEW.user_id;
+    END IF;
+
+    NEW.organization_id := owner_organization_id;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.assign_organization_to_user_owned_data() FROM PUBLIC;
+
+DROP TRIGGER IF EXISTS assign_facebook_tokens_organization ON public.facebook_tokens;
+CREATE TRIGGER assign_facebook_tokens_organization
+  BEFORE INSERT OR UPDATE OF user_id, organization_id ON public.facebook_tokens
+  FOR EACH ROW EXECUTE FUNCTION public.assign_organization_to_user_owned_data();
+
+DROP TRIGGER IF EXISTS assign_ad_accounts_organization ON public.ad_accounts;
+CREATE TRIGGER assign_ad_accounts_organization
+  BEFORE INSERT OR UPDATE OF user_id, organization_id ON public.ad_accounts
+  FOR EACH ROW EXECUTE FUNCTION public.assign_organization_to_user_owned_data();
+
+ALTER TABLE public.facebook_tokens
+  ALTER COLUMN organization_id SET NOT NULL;
+ALTER TABLE public.ad_accounts
+  ALTER COLUMN organization_id SET NOT NULL;
+
 CREATE INDEX IF NOT EXISTS facebook_tokens_organization_idx
   ON public.facebook_tokens (organization_id);
 CREATE INDEX IF NOT EXISTS ad_accounts_organization_idx
@@ -253,6 +301,9 @@ AS $$
     false
   );
 $$;
+
+REVOKE ALL ON FUNCTION public.can_access_organization(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.can_access_organization(uuid) TO authenticated, service_role;
 
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.organization_memberships ENABLE ROW LEVEL SECURITY;
