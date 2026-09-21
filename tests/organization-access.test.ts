@@ -28,6 +28,15 @@ describe("pickActiveOrganization", () => {
     ).toBe("manager-org");
   });
 
+  it("chooses smallest owner ID when owner memberships arrive out of order", () => {
+    expect(
+      pickActiveOrganization([
+        { organization_id: "owner-9f2", role: "owner" },
+        { organization_id: "owner-103", role: "owner" },
+      ]),
+    ).toBe("owner-103");
+  });
+
   it("returns null when membership list is empty", () => {
     expect(pickActiveOrganization([])).toBeNull();
   });
@@ -57,14 +66,31 @@ describe("requireActiveOrganization", () => {
     });
   });
 
+  it("throws when authentication validation fails", async () => {
+    const supabase = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: null },
+          error: new Error("session validation failed"),
+        }),
+      },
+    };
+    createClient.mockResolvedValue(supabase);
+
+    await expect(requireActiveOrganization()).rejects.toThrow(
+      "Não foi possível validar autenticação",
+    );
+  });
+
   it("loads memberships for authenticated user and returns highest-priority organization", async () => {
-    const eq = vi.fn().mockResolvedValue({
+    const order = vi.fn().mockResolvedValue({
       data: [
         { organization_id: "agent-org", role: "agent" },
         { organization_id: "manager-org", role: "manager" },
       ],
       error: null,
     });
+    const eq = vi.fn(() => ({ order }));
     const select = vi.fn(() => ({ eq }));
     const from = vi.fn(() => ({ select }));
     const user = { id: "user-1" };
@@ -81,10 +107,11 @@ describe("requireActiveOrganization", () => {
     });
     expect(from).toHaveBeenCalledWith("organization_memberships");
     expect(eq).toHaveBeenCalledWith("user_id", "user-1");
+    expect(order).toHaveBeenCalledWith("organization_id", { ascending: true });
   });
 
   it("throws a readable error when membership query fails", async () => {
-    const eq = vi.fn().mockResolvedValue({
+    const order = vi.fn().mockResolvedValue({
       data: null,
       error: new Error("database unavailable"),
     });
@@ -92,7 +119,7 @@ describe("requireActiveOrganization", () => {
       auth: {
         getUser: vi.fn().mockResolvedValue({ data: { user: { id: "user-1" } } }),
       },
-      from: vi.fn(() => ({ select: vi.fn(() => ({ eq })) })),
+      from: vi.fn(() => ({ select: vi.fn(() => ({ eq: vi.fn(() => ({ order })) })) })),
     };
     createClient.mockResolvedValue(supabase);
 
