@@ -82,10 +82,13 @@ describe("requireActiveOrganization", () => {
       (error: unknown) => error,
     );
 
-    expect(error).toMatchObject({
-      message: "Não foi possível validar autenticação",
-      cause: authError,
-    });
+    expect(error).toBeInstanceOf(Error);
+    if (!(error instanceof Error)) {
+      throw error;
+    }
+
+    expect(error.message).toBe("Não foi possível validar autenticação");
+    expect(error.cause).toBe(authError);
   });
 
   it("loads memberships for authenticated user and returns highest-priority organization", async () => {
