@@ -30,7 +30,7 @@ describe("CRM Phase 1 schema migration", () => {
     const sql = readMigration();
 
     expect(sql).toMatch(/name\s+text\s+not null\s+check\s*\(char_length\(name\) between 2 and 120\)/i);
-    expect(sql).toMatch(/slug\s+text\s+not null\s+unique\s+check\s*\(slug = lower\(slug\).*char_length\(slug\) between 3 and 80/i);
+    expect(sql).toMatch(/slug\s+text\s+not null\s+unique\s+check\s*\(slug ~ '\^\[a-z0-9-\]\{3,80\}\$'\)/i);
     expect(sql).toMatch(/primary key\s*\(organization_id, user_id\)/i);
     expect(sql).toMatch(/role\s+text\s+not null\s+check\s*\(role in \('owner', 'manager', 'agent'\)\)/i);
     expect(sql).toMatch(/check\s*\(phone is not null or email is not null\)/i);
@@ -53,6 +53,7 @@ describe("CRM Phase 1 schema migration", () => {
     )?.[1];
     expect(bootstrapBody).toBeDefined();
     expect(bootstrapBody).not.toMatch(/ON CONFLICT \(slug\) DO UPDATE/i);
+    expect(bootstrapBody).toMatch(/PERFORM pg_advisory_xact_lock\(hashtextextended\(target_user_id::text, 0\)\)/i);
     expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.create_default_pipeline_stages\(\)/i);
     for (const stage of ["Novo lead", "Em atendimento", "Qualificado", "Proposta", "Vendido", "Perdido"]) {
       expect(sql).toContain(`'${stage}'`);
@@ -69,8 +70,15 @@ describe("CRM Phase 1 schema migration", () => {
     expect(sql).toMatch(/ALTER TABLE public\.ad_accounts\s+ADD COLUMN IF NOT EXISTS organization_id uuid/i);
     expect(sql).toMatch(/CREATE INDEX IF NOT EXISTS facebook_tokens_organization_idx/i);
     expect(sql).toMatch(/CREATE INDEX IF NOT EXISTS ad_accounts_organization_idx/i);
+    expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.assign_organization_to_user_owned_data\(\)[\s\S]*SECURITY DEFINER[\s\S]*SET search_path = public/i);
+    expect(sql).toMatch(/CREATE TRIGGER assign_facebook_tokens_organization\s+BEFORE INSERT OR UPDATE OF user_id, organization_id ON public\.facebook_tokens/i);
+    expect(sql).toMatch(/CREATE TRIGGER assign_ad_accounts_organization\s+BEFORE INSERT OR UPDATE OF user_id, organization_id ON public\.ad_accounts/i);
+    expect(sql).toMatch(/ALTER TABLE public\.facebook_tokens\s+ALTER COLUMN organization_id SET NOT NULL/i);
+    expect(sql).toMatch(/ALTER TABLE public\.ad_accounts\s+ALTER COLUMN organization_id SET NOT NULL/i);
     expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.can_access_organization\(target_organization_id uuid\)/i);
     expect(sql).toMatch(/auth\.jwt\(\)\s*->\s*'app_metadata'\s*->>\s*'role'\s*=\s*'admin'/i);
+    expect(sql).toMatch(/REVOKE ALL ON FUNCTION public\.can_access_organization\(uuid\) FROM PUBLIC/i);
+    expect(sql).toMatch(/GRANT EXECUTE ON FUNCTION public\.can_access_organization\(uuid\) TO authenticated, service_role/i);
 
     for (const table of [
       "organizations",
