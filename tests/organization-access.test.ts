@@ -67,19 +67,25 @@ describe("requireActiveOrganization", () => {
   });
 
   it("throws when authentication validation fails", async () => {
+    const authError = new Error("session validation failed");
     const supabase = {
       auth: {
         getUser: vi.fn().mockResolvedValue({
           data: { user: null },
-          error: new Error("session validation failed"),
+          error: authError,
         }),
       },
     };
     createClient.mockResolvedValue(supabase);
 
-    await expect(requireActiveOrganization()).rejects.toThrow(
-      "Não foi possível validar autenticação",
+    const error = await requireActiveOrganization().catch(
+      (error: unknown) => error,
     );
+
+    expect(error).toMatchObject({
+      message: "Não foi possível validar autenticação",
+      cause: authError,
+    });
   });
 
   it("loads memberships for authenticated user and returns highest-priority organization", async () => {

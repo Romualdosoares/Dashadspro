@@ -31,7 +31,9 @@ export async function requireActiveOrganization() {
   } = await supabase.auth.getUser();
 
   if (authError) {
-    throw new Error("Não foi possível validar autenticação");
+    throw new Error("Não foi possível validar autenticação", {
+      cause: authError,
+    });
   }
 
   if (!user) {
