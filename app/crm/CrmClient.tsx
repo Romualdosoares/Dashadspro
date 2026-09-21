@@ -5,9 +5,9 @@ import { AlertCircle, LayoutDashboard, LoaderCircle, Plus, RefreshCw } from "luc
 import {
   PipelineRequestTracker,
   addMovingLead,
-  canSubmitCrmLead,
   getMoveLeadAriaLabel,
   getCrmPipelineViewLabels,
+  isLeadFormDisabled,
   loadCrmPipeline,
   removeMovingLead,
   requestLeadMove,
@@ -67,7 +67,7 @@ export default function CrmClient({
 
   const columns = useMemo(() => buildPipelineColumns(stages, leads), [stages, leads]);
   const viewLabels = getCrmPipelineViewLabels({ loading, error, columnCount: columns.length });
-  const submitDisabled = !canSubmitCrmLead({ loading, saving });
+  const submitDisabled = isLeadFormDisabled({ loading, saving });
 
   async function createLead(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -147,6 +147,7 @@ export default function CrmClient({
               Nome
               <input
                 required
+                disabled={submitDisabled}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 className="border border-[#2A2F2A] bg-[#0B0C0A] px-3 py-2 text-sm text-white outline-none placeholder:text-[#667066] focus:border-[#00E676]"
@@ -157,6 +158,7 @@ export default function CrmClient({
               WhatsApp
               <input
                 type="tel"
+                disabled={submitDisabled}
                 value={phone}
                 onChange={(event) => setPhone(event.target.value)}
                 className="border border-[#2A2F2A] bg-[#0B0C0A] px-3 py-2 text-sm text-white outline-none placeholder:text-[#667066] focus:border-[#00E676]"
@@ -167,6 +169,7 @@ export default function CrmClient({
               Email
               <input
                 type="email"
+                disabled={submitDisabled}
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 className="border border-[#2A2F2A] bg-[#0B0C0A] px-3 py-2 text-sm text-white outline-none placeholder:text-[#667066] focus:border-[#00E676]"
@@ -177,6 +180,7 @@ export default function CrmClient({
               Origem
               <select
                 value={source}
+                disabled={submitDisabled}
                 onChange={(event) => setSource(event.target.value as LeadSource)}
                 className="border border-[#2A2F2A] bg-[#0B0C0A] px-3 py-2 text-sm text-white outline-none focus:border-[#00E676]"
               >

@@ -35,6 +35,10 @@ export function canSubmitCrmLead({ loading, saving }: { loading: boolean; saving
   return !loading && !saving;
 }
 
+export function isLeadFormDisabled({ loading, saving }: { loading: boolean; saving: boolean }): boolean {
+  return !canSubmitCrmLead({ loading, saving });
+}
+
 export function addMovingLead(currentLeadIds: Set<string>, leadId: string): Set<string> {
   return new Set(currentLeadIds).add(leadId);
 }

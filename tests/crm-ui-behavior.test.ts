@@ -5,6 +5,7 @@ import {
   addMovingLead,
   canSubmitCrmLead,
   getMoveLeadAriaLabel,
+  isLeadFormDisabled,
   emptyLeadForm,
   getCrmPipelineViewLabels,
   loadCrmPipeline,
@@ -118,6 +119,12 @@ describe("CRM client requests", () => {
     expect(canSubmitCrmLead({ loading: true, saving: false })).toBe(false);
     expect(canSubmitCrmLead({ loading: false, saving: true })).toBe(false);
     expect(canSubmitCrmLead({ loading: false, saving: false })).toBe(true);
+  });
+
+  it("disables every lead form control while loading or saving", () => {
+    expect(isLeadFormDisabled({ loading: true, saving: false })).toBe(true);
+    expect(isLeadFormDisabled({ loading: false, saving: true })).toBe(true);
+    expect(isLeadFormDisabled({ loading: false, saving: false })).toBe(false);
   });
 
   it("ignores an older pipeline snapshot after canonical reload starts", () => {
