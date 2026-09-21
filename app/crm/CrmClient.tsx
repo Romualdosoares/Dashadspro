@@ -2,20 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, LayoutDashboard, LoaderCircle, Plus, RefreshCw } from "lucide-react";
+import {
+  getCrmPipelineViewLabels,
+  loadCrmPipeline,
+  requestLeadMove,
+  submitCrmLead,
+} from "@/lib/crm-client-state";
 import { buildPipelineColumns } from "@/lib/crm-pipeline";
 import type { CrmLead, CrmStage, LeadSource } from "@/lib/crm-types";
-
-type CrmContextResponse = {
-  stages: CrmStage[];
-};
-
-type CrmLeadsResponse = {
-  leads: CrmLead[];
-};
-
-type CreateLeadResponse = {
-  lead: Pick<CrmLead, "id" | "contact_id" | "stage_id">;
-};
 
 const sourceLabels: Record<LeadSource, string> = {
   manual: "Manual",
@@ -46,19 +40,9 @@ export default function CrmClient({
     setError(null);
 
     try {
-      const [contextResponse, leadsResponse] = await Promise.all([
-        fetch("/api/crm/context"),
-        fetch("/api/crm/leads"),
-      ]);
-      const context = (await contextResponse.json().catch(() => null)) as CrmContextResponse | null;
-      const leadData = (await leadsResponse.json().catch(() => null)) as CrmLeadsResponse | null;
-
-      if (!contextResponse.ok || !leadsResponse.ok || !context || !leadData) {
-        throw new Error("Não foi possível carregar o CRM.");
-      }
-
-      setStages(Array.isArray(context.stages) ? context.stages : []);
-      setLeads(Array.isArray(leadData.leads) ? leadData.leads : []);
+      const pipeline = await loadCrmPipeline(fetch);
+      setStages(pipeline.stages);
+      setLeads(pipeline.leads);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Não foi possível carregar o CRM.");
     } finally {
@@ -71,6 +55,7 @@ export default function CrmClient({
   }, [loadPipeline]);
 
   const columns = useMemo(() => buildPipelineColumns(stages, leads), [stages, leads]);
+  const viewLabels = getCrmPipelineViewLabels({ loading, error, columnCount: columns.length });
 
   async function createLead(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -83,36 +68,18 @@ export default function CrmClient({
 
     setSaving(true);
     try {
-      const response = await fetch("/api/crm/leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, email, source }),
-      });
-      const data = (await response.json().catch(() => null)) as
-        | CreateLeadResponse
-        | { error?: string }
-        | null;
-
-      if (!response.ok || !data || !("lead" in data)) {
-        throw new Error(data && "error" in data && data.error ? data.error : "Não foi possível criar o lead.");
-      }
-
-      setLeads((currentLeads) => [
-        {
-          ...data.lead,
-          source,
-          status: "open",
-          contact_name: name.trim(),
-          contact_phone: phone.trim() || null,
-          contact_email: email.trim() || null,
-          created_at: new Date().toISOString(),
+      await submitCrmLead(
+        fetch,
+        { name, phone, email, source },
+        new Date().toISOString(),
+        (createdLead, resetForm) => {
+          setLeads((currentLeads) => [createdLead, ...currentLeads]);
+          setName(resetForm.name);
+          setPhone(resetForm.phone);
+          setEmail(resetForm.email);
+          setSource(resetForm.source);
         },
-        ...currentLeads,
-      ]);
-      setName("");
-      setPhone("");
-      setEmail("");
-      setSource("manual");
+      );
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Não foi possível criar o lead.");
     } finally {
@@ -125,20 +92,11 @@ export default function CrmClient({
     setMovingLeadId(leadId);
 
     try {
-      const response = await fetch(`/api/crm/leads/${leadId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage_id: stageId }),
+      await requestLeadMove(fetch, leadId, stageId, (updatedLeadId, updatedStageId) => {
+        setLeads((currentLeads) => currentLeads.map((lead) => (
+          lead.id === updatedLeadId ? { ...lead, stage_id: updatedStageId } : lead
+        )));
       });
-      const data = (await response.json().catch(() => null)) as { error?: string } | null;
-
-      if (!response.ok) {
-        throw new Error(data?.error ?? "Não foi possível mover o lead.");
-      }
-
-      setLeads((currentLeads) => currentLeads.map((lead) => (
-        lead.id === leadId ? { ...lead, stage_id: stageId } : lead
-      )));
     } catch (moveError) {
       setError(moveError instanceof Error ? moveError.message : "Não foi possível mover o lead.");
     } finally {
@@ -239,22 +197,22 @@ export default function CrmClient({
           </button>
         </div>
 
-        {error ? (
+        {viewLabels.error ? (
           <p className="mt-4 flex items-center gap-2 border border-[#00E676] bg-[#10120F] p-3 text-sm text-[#E8EDE8]" role="alert">
             <AlertCircle size={16} className="text-[#00E676]" aria-hidden="true" />
-            {error}
+            {viewLabels.error}
           </p>
         ) : null}
 
-        {loading ? (
+        {viewLabels.loading ? (
           <p className="mt-4 flex items-center gap-2 text-sm text-[#AAB2AA]" role="status">
             <LoaderCircle size={16} className="animate-spin text-[#00E676]" aria-hidden="true" />
-            Carregando pipeline...
+            {viewLabels.loading}
           </p>
         ) : null}
 
-        {!loading && columns.length === 0 ? (
-          <p className="mt-4 border border-[#2A2F2A] p-4 text-sm text-[#AAB2AA]">Nenhuma etapa de pipeline disponível.</p>
+        {viewLabels.empty ? (
+          <p className="mt-4 border border-[#2A2F2A] p-4 text-sm text-[#AAB2AA]">{viewLabels.empty}</p>
         ) : null}
 
         {!loading && columns.length > 0 ? (
