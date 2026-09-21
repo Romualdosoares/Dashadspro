@@ -29,3 +29,5 @@ DROP TRIGGER IF EXISTS trg_user_preferences_updated_at ON user_preferences;
 CREATE TRIGGER trg_user_preferences_updated_at
   BEFORE UPDATE ON user_preferences
   FOR EACH ROW EXECUTE FUNCTION update_user_preferences_updated_at();
+
+ALTER FUNCTION update_user_preferences_updated_at() SET search_path = public;

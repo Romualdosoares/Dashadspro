@@ -3062,8 +3062,8 @@ export default function DashAdsPro({ accountInfo }: { accountInfo?: AccountInfo 
   const [realtimeEnabled, setRealtimeEnabled] = useState(true);
 
   // ── WhatsApp Reports state ──
-  type WaConfig = { phone: string; zapi_instance: string; zapi_token: string; schedule: string; schedule_hours: number[]; date_preset: string; enabled: boolean; last_sent_at?: string | null };
-  const [waConfig, setWaConfig] = useState<WaConfig>({ phone: "", zapi_instance: "", zapi_token: "", schedule: "manual", schedule_hours: [11, -1, -1, -1], date_preset: "today", enabled: false, last_sent_at: null });
+  type WaConfig = { phone: string; zapi_instance: string; zapi_token: string; zapi_token_configured: boolean; schedule: string; schedule_hours: number[]; schedule_timezone: string; date_preset: string; enabled: boolean; last_sent_at?: string | null };
+  const [waConfig, setWaConfig] = useState<WaConfig>({ phone: "", zapi_instance: "", zapi_token: "", zapi_token_configured: false, schedule: "manual", schedule_hours: [11, -1, -1, -1], schedule_timezone: "America/Sao_Paulo", date_preset: "today", enabled: false, last_sent_at: null });
   const [waSaving, setWaSaving] = useState(false);
   const [waSending, setWaSending] = useState(false);
   const [waMsg, setWaMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -5184,20 +5184,19 @@ export default function DashAdsPro({ accountInfo }: { accountInfo?: AccountInfo 
                     <label className={labelCls}>Horários de envio — até 4 por dia (Brasília)</label>
                     <div className="grid grid-cols-2 gap-2">
                       {[0, 1, 2, 3].map((slot) => {
-                        const utcVal = waConfig.schedule_hours[slot] ?? -1;
-                        const brtVal = utcVal >= 0 ? utcVal - 3 : -1;
+                        const localValue = waConfig.schedule_hours[slot] ?? -1;
                         return (
                           <div key={slot} className="relative">
                             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-[#555] font-semibold pointer-events-none">
                               {slot + 1}
                             </div>
                             <select
-                              value={brtVal}
+                              value={localValue}
                               onChange={(e) => {
                                 const v = parseInt(e.target.value);
                                 setWaConfig((p) => {
                                   const arr = [...(p.schedule_hours.length >= 4 ? p.schedule_hours : [11, -1, -1, -1])];
-                                  arr[slot] = v >= 0 ? v + 3 : -1;
+                                  arr[slot] = v;
                                   return { ...p, schedule_hours: arr };
                                 });
                               }}
@@ -5249,7 +5248,7 @@ export default function DashAdsPro({ accountInfo }: { accountInfo?: AccountInfo 
 
                 <button
                   onClick={sendNow}
-                  disabled={waSending || !waConfig.phone || !waConfig.zapi_instance || !waConfig.zapi_token}
+                  disabled={waSending || !waConfig.phone || !waConfig.zapi_instance || !(waConfig.zapi_token || waConfig.zapi_token_configured)}
                   className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-[#25D366]/10 border border-[#25D366]/25 text-[#25D366] text-sm font-semibold hover:bg-[#25D366]/20 hover:border-[#25D366]/40 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {waSending ? <Loader2 size={15} className="animate-spin" /> : <MessageCircle size={15} />}

@@ -11,8 +11,10 @@ CREATE TABLE IF NOT EXISTS whatsapp_reports (
   zapi_token        text    NOT NULL DEFAULT '',
   schedule          text    NOT NULL DEFAULT 'manual'
                             CHECK (schedule IN ('manual','daily','weekly')),
-  schedule_hour     int     NOT NULL DEFAULT 8
-                            CHECK (schedule_hour >= 0 AND schedule_hour <= 23),
+  schedule_hours    int[]   NOT NULL DEFAULT ARRAY[11]
+                            CHECK (cardinality(schedule_hours) <= 4
+                              AND 0 <= ALL(schedule_hours)
+                              AND 23 >= ALL(schedule_hours)),
   schedule_timezone text    NOT NULL DEFAULT 'America/Sao_Paulo',
   date_preset       text    NOT NULL DEFAULT 'today',
   enabled           boolean NOT NULL DEFAULT false,
@@ -44,3 +46,5 @@ DROP TRIGGER IF EXISTS trg_whatsapp_reports_updated_at ON whatsapp_reports;
 CREATE TRIGGER trg_whatsapp_reports_updated_at
   BEFORE UPDATE ON whatsapp_reports
   FOR EACH ROW EXECUTE FUNCTION update_whatsapp_reports_updated_at();
+
+ALTER FUNCTION update_whatsapp_reports_updated_at() SET search_path = public;

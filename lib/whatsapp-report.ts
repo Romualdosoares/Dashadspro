@@ -3,6 +3,7 @@
  */
 
 import { fetchAdAccountInsights, fetchCampaignInsights } from "./meta-api";
+import { normalizeBrazilianPhone } from "./report-schedule";
 
 // ── Formatters ──────────────────────────────────────────────────────────────
 function fmtCurrency(val: number): string {
@@ -149,9 +150,7 @@ export async function sendZapiMessage(
   message: string
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    // Normalize phone: remove non-digits, ensure country code
-    const digits = phone.replace(/\D/g, "");
-    const normalized = digits.startsWith("55") ? digits : `55${digits}`;
+    const normalized = normalizeBrazilianPhone(phone);
 
     const url = `https://api.z-api.io/instances/${zapiInstance}/token/${zapiToken}/send-text`;
     const res = await fetch(url, {
@@ -160,6 +159,7 @@ export async function sendZapiMessage(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ phone: normalized, message }),
+      signal: AbortSignal.timeout(15_000),
     });
 
     const data = await res.json();

@@ -1,6 +1,5 @@
 import type { MetaBusiness, MetaAdAccount, MetaApiResponse, AdInsights } from "./types";
-
-const GRAPH_BASE = "https://graph.facebook.com/v21.0";
+import { GRAPH_BASE } from "./meta-config";
 
 /** Build Meta API date query param string.
  *  Preset "custom:YYYY-MM-DD:YYYY-MM-DD" → time_range; otherwise → date_preset */
@@ -58,16 +57,14 @@ export async function fetchAdAccountInsights(
   accessToken: string,
   datePreset = "last_30d"
 ): Promise<AdInsights | null> {
-  try {
-    const fields = "spend,impressions,clicks,ctr,cpm,reach,frequency,actions,action_values";
-    const url = `${GRAPH_BASE}/${adAccountId}/insights?fields=${fields}&${buildDateParam(datePreset)}&access_token=${accessToken}`;
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.data?.[0] ?? null;
-  } catch {
-    return null;
+  const fields = "spend,impressions,clicks,ctr,cpm,reach,frequency,actions,action_values";
+  const url = `${GRAPH_BASE}/${adAccountId}/insights?fields=${fields}&${buildDateParam(datePreset)}&access_token=${accessToken}`;
+  const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.error) {
+    throw new Error(data.error?.message ?? `Meta API HTTP ${res.status}`);
   }
+  return data.data?.[0] ?? null;
 }
 
 export interface DailyInsight {

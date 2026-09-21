@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getFacebookToken } from "@/lib/meta-token";
 import { fetchAdAccountInsights } from "@/lib/meta-api";
+import { parseAccountIds } from "@/lib/meta-validation";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -13,12 +14,26 @@ export async function GET(request: Request) {
 
   // Pega IDs das contas passadas via query string, ou usa a conta selecionada
   const idsParam = searchParams.get("ids");
-  let accountIds: string[] = idsParam ? idsParam.split(",").filter(Boolean) : [];
+  let accountIds: string[];
+  try {
+    accountIds = parseAccountIds(idsParam);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "IDs invalidos" },
+      { status: 400 },
+    );
+  }
 
   // Se não passaram IDs, usa a conta selecionada como fallback
   if (accountIds.length === 0) {
     const selectedId = user.user_metadata?.selected_ad_account_id;
-    if (selectedId) accountIds = [selectedId];
+    if (selectedId) {
+      try {
+        accountIds = parseAccountIds(String(selectedId));
+      } catch {
+        return NextResponse.json({ error: "Conta selecionada invalida" }, { status: 400 });
+      }
+    }
   }
 
   if (accountIds.length === 0) {

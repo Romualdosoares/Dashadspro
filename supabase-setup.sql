@@ -1,7 +1,7 @@
 -- ════════════════════════════════════════════════════════════════
 -- DashAds Pro — Setup do Banco de Dados Supabase
 -- Execute este arquivo no SQL Editor do painel Supabase
--- https://supabase.com/dashboard/project/odbivlazrsrmvljxkqde/sql
+-- Execute no SQL Editor do projeto Supabase ativo.
 -- ════════════════════════════════════════════════════════════════
 
 -- 1. Extensão para criptografia de tokens
@@ -121,8 +121,6 @@ CREATE OR REPLACE FUNCTION public.decrypt_token(encrypted_token TEXT, key TEXT)
 RETURNS TEXT AS $$
 BEGIN
   RETURN pgp_sym_decrypt(decode(encrypted_token, 'base64')::bytea, key);
-EXCEPTION WHEN OTHERS THEN
-  RETURN encrypted_token; -- fallback: retorna o valor original se falhar
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -132,3 +130,12 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE INDEX IF NOT EXISTS idx_facebook_tokens_user_id ON public.facebook_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_ad_accounts_user_id ON public.ad_accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_ad_accounts_selected ON public.ad_accounts(user_id, is_selected) WHERE is_selected = TRUE;
+
+-- Lock down SECURITY DEFINER functions and expose token crypto only to the backend.
+ALTER FUNCTION public.handle_new_user() SET search_path = public;
+ALTER FUNCTION public.encrypt_token(TEXT, TEXT) SET search_path = public, extensions;
+ALTER FUNCTION public.decrypt_token(TEXT, TEXT) SET search_path = public, extensions;
+REVOKE ALL ON FUNCTION public.encrypt_token(TEXT, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.decrypt_token(TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.encrypt_token(TEXT, TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION public.decrypt_token(TEXT, TEXT) TO service_role;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getFacebookToken } from "@/lib/meta-token";
+import { getPreviousPeriod, parseDateSelection } from "@/lib/meta-validation";
 
 export const dynamic = "force-dynamic";
 import {
@@ -10,16 +11,6 @@ import {
   fetchVideoRetention,
   fetchFunnelActions,
 } from "@/lib/meta-api";
-
-const PREVIOUS_PERIOD: Record<string, string> = {
-  today: "yesterday",
-  yesterday: "last_3d",
-  last_3d: "last_7d",
-  last_7d: "last_14d",
-  last_30d: "last_90d",
-  this_month: "last_month",
-  last_month: "last_3_months",
-};
 
 function calcVariation(current: string, previous: string): number | null {
   const c = parseFloat(current);
@@ -37,7 +28,15 @@ export async function GET(request: Request) {
   const since = searchParams.get("since");
   const until = searchParams.get("until");
   const rawPreset = searchParams.get("date_preset") ?? "last_30d";
-  const datePreset = since && until ? `custom:${since}:${until}` : rawPreset;
+  let datePreset: string;
+  try {
+    datePreset = parseDateSelection(rawPreset, since, until);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Periodo invalido" },
+      { status: 400 },
+    );
+  }
 
   const adAccountId = user.user_metadata?.selected_ad_account_id;
   if (!adAccountId) {
@@ -49,19 +48,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Token do Facebook não disponível" }, { status: 403 });
   }
 
-  // For custom date ranges, compute the equivalent previous period
-  let prevPreset: string;
-  if (since && until) {
-    const sinceDate = new Date(since);
-    const untilDate = new Date(until);
-    const daysDiff = Math.round((untilDate.getTime() - sinceDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const prevUntil = new Date(sinceDate.getTime() - 1000 * 60 * 60 * 24);
-    const prevSince = new Date(prevUntil.getTime() - (daysDiff - 1) * 1000 * 60 * 60 * 24);
-    const toISO = (d: Date) => d.toISOString().split("T")[0];
-    prevPreset = `custom:${toISO(prevSince)}:${toISO(prevUntil)}`;
-  } else {
-    prevPreset = PREVIOUS_PERIOD[datePreset] ?? "last_90d";
-  }
+  const prevPreset = getPreviousPeriod(datePreset);
 
   const [overview, daily, platforms, videoRaw, funnelActions, prevOverview] = await Promise.all([
     fetchAdAccountInsights(adAccountId, token, datePreset),

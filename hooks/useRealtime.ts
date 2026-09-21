@@ -15,7 +15,10 @@ export function useRealtime({
 }: UseRealtimeOptions) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const onTickRef = useRef(onTick);
-  onTickRef.current = onTick;
+
+  useEffect(() => {
+    onTickRef.current = onTick;
+  }, [onTick]);
 
   const start = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);

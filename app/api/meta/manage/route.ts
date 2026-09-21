@@ -1,70 +1,40 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getFacebookToken } from "@/lib/meta-token";
+import { GRAPH_BASE } from "@/lib/meta-config";
+import { validateManagePayload } from "@/lib/meta-validation";
 
-const GRAPH_BASE = "https://graph.facebook.com/v21.0";
-
-// PATCH /api/meta/manage
-// Body: { type: "campaign"|"adset"|"ad", id: string, action: "status"|"budget", value: string|number }
 export async function PATCH(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json();
-  const { type, id, action, value } = body as {
-    type: "campaign" | "adset" | "ad";
-    id: string;
-    action: "status" | "daily_budget" | "lifetime_budget";
-    value: string | number;
-  };
-
-  if (!type || !id || !action || value === undefined) {
-    return NextResponse.json({ error: "Parâmetros inválidos" }, { status: 400 });
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "JSON invalido" }, { status: 400 });
   }
 
-  const ALLOWED_TYPES = ["campaign", "adset", "ad"];
-  if (!ALLOWED_TYPES.includes(type)) {
-    return NextResponse.json({ error: "Tipo inválido" }, { status: 400 });
+  const validation = validateManagePayload(body);
+  if (!validation.ok) {
+    return NextResponse.json({ error: validation.error }, { status: 400 });
   }
-
-  // Anúncios individuais não suportam alteração de orçamento via API Meta
-  if (type === "ad" && (action === "daily_budget" || action === "lifetime_budget")) {
-    return NextResponse.json({ error: "Orçamento só pode ser alterado em campanhas e conjuntos de anúncios" }, { status: 400 });
-  }
-
-  // Valida ID: deve conter apenas dígitos (IDs Meta são numéricos)
-  if (!/^\d+$/.test(String(id))) {
-    return NextResponse.json({ error: "ID inválido" }, { status: 400 });
-  }
+  const { id, action, value } = validation.value;
 
   const { token } = await getFacebookToken();
   if (!token) {
-    console.error("[manage] Token não encontrado para user:", user.id);
-    return NextResponse.json({ error: "Sessão do Facebook expirada. Faça logout e entre novamente com o Facebook." }, { status: 403 });
-  }
-
-  // Status values: ACTIVE, PAUSED, ARCHIVED
-  const allowedStatuses = ["ACTIVE", "PAUSED", "ARCHIVED"];
-  if (action === "status" && !allowedStatuses.includes(String(value))) {
-    return NextResponse.json({ error: "Status inválido" }, { status: 400 });
-  }
-
-  // Budget must be a valid positive number (frontend envia em R$)
-  if (action === "daily_budget" || action === "lifetime_budget") {
-    const numVal = Number(value);
-    if (isNaN(numVal) || numVal <= 0) {
-      return NextResponse.json({ error: "Orçamento inválido. Informe um valor maior que zero." }, { status: 400 });
-    }
+    console.error("[manage] Token nao encontrado para user:", user.id);
+    return NextResponse.json(
+      { error: "Sessao do Facebook expirada. Faca logout e entre novamente com o Facebook." },
+      { status: 403 },
+    );
   }
 
   const params = new URLSearchParams({ access_token: token });
   if (action === "status") {
     params.set("status", String(value));
   } else {
-    // Meta API espera em centavos (valor em R$ × 100)
     params.set(action, String(Math.round(Number(value) * 100)));
   }
 
@@ -72,17 +42,17 @@ export async function PATCH(request: Request) {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: params.toString(),
+    signal: AbortSignal.timeout(15_000),
   });
-
   const data = await res.json();
 
   if (!res.ok || data.error) {
     const fbCode = data.error?.code;
     const fbMsg = data.error?.message ?? "Erro ao atualizar";
     let userMsg = fbMsg;
-    if (fbCode === 190) userMsg = "Sessão do Facebook expirada. Faça logout e entre novamente.";
-    else if (fbCode === 200) userMsg = "Sem permissão para editar esta campanha.";
-    else if (fbCode === 100) userMsg = "Parâmetro inválido enviado à API do Meta.";
+    if (fbCode === 190) userMsg = "Sessao do Facebook expirada. Faca logout e entre novamente.";
+    else if (fbCode === 200) userMsg = "Sem permissao para editar esta campanha.";
+    else if (fbCode === 100) userMsg = "Parametro invalido enviado a API do Meta.";
     console.error("[manage] Meta API error:", { id, action, fbCode, fbMsg });
     return NextResponse.json({ error: userMsg }, { status: res.status || 500 });
   }

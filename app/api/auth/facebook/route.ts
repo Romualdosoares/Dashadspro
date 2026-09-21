@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { resolveSiteOrigin } from "@/lib/site-url";
 
 export async function GET(request: Request) {
-  const baseUrl = new URL(request.url).origin;
+  const baseUrl = resolveSiteOrigin(request.url);
   const supabase = await createClient();
 
   const { data, error } = await supabase.auth.signInWithOAuth({
