@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { getCrmPageState } from "../lib/crm-page-state";
 import {
+  PipelineRequestTracker,
+  addMovingLead,
+  canSubmitCrmLead,
+  getMoveLeadAriaLabel,
   emptyLeadForm,
   getCrmPipelineViewLabels,
   loadCrmPipeline,
+  removeMovingLead,
   requestLeadMove,
   submitCrmLead,
 } from "../lib/crm-client-state";
@@ -54,7 +59,7 @@ describe("CRM client requests", () => {
     expect(fetcher).toHaveBeenNthCalledWith(2, "/api/crm/leads");
   });
 
-  it("waits for lead creation response before updating UI state and clearing form", async () => {
+  it("resets form then reloads canonical leads after creation without synthesizing a lead", async () => {
     const events: string[] = [];
     const fetcher = vi.fn(async () => {
       events.push("request");
@@ -68,18 +73,12 @@ describe("CRM client requests", () => {
     });
     const form = { name: "Bruno Lima", phone: "(11) 99999-0000", email: "", source: "whatsapp" as const };
 
-    await submitCrmLead(fetcher, form, "2026-09-21T12:00:00.000Z", (createdLead, resetForm) => {
-      events.push("apply");
-      expect(createdLead).toMatchObject({
-        id: "lead-2",
-        contact_name: "Bruno Lima",
-        contact_phone: "(11) 99999-0000",
-        source: "whatsapp",
-      });
+    await submitCrmLead(fetcher, form, (resetForm) => {
+      events.push("reload");
       expect(resetForm).toEqual(emptyLeadForm);
     });
 
-    expect(events).toEqual(["request", "response", "apply"]);
+    expect(events).toEqual(["request", "response", "reload"]);
     expect(fetcher).toHaveBeenCalledWith("/api/crm/leads", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -87,11 +86,11 @@ describe("CRM client requests", () => {
     });
   });
 
-  it("sends only stage_id and changes lead state only after a successful move", async () => {
+  it("sends only stage_id and applies server-authoritative move state only after success", async () => {
     const applyMove = vi.fn();
     const fetcher = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ error: "Stage not found" }, 404))
-      .mockResolvedValueOnce(jsonResponse({ lead: { id: "lead-1", stage_id: "stage-won" } }));
+      .mockResolvedValueOnce(jsonResponse({ lead: { id: "lead-1", stage_id: "stage-server" } }));
 
     await expect(requestLeadMove(fetcher, "lead-1", "stage-won", applyMove)).rejects.toThrow("Stage not found");
     expect(applyMove).not.toHaveBeenCalled();
@@ -103,7 +102,38 @@ describe("CRM client requests", () => {
       body: JSON.stringify({ stage_id: "stage-won" }),
     });
     expect(applyMove).toHaveBeenCalledOnce();
-    expect(applyMove).toHaveBeenCalledWith("lead-1", "stage-won");
+    expect(applyMove).toHaveBeenCalledWith("lead-1", "stage-server");
+  });
+
+  it("keeps each move disabled until its own request settles", () => {
+    let movingLeadIds = addMovingLead(new Set(), "lead-a");
+    movingLeadIds = addMovingLead(movingLeadIds, "lead-b");
+    movingLeadIds = removeMovingLead(movingLeadIds, "lead-a");
+
+    expect(movingLeadIds.has("lead-a")).toBe(false);
+    expect(movingLeadIds.has("lead-b")).toBe(true);
+  });
+
+  it("rejects form submission while a pipeline snapshot is loading", () => {
+    expect(canSubmitCrmLead({ loading: true, saving: false })).toBe(false);
+    expect(canSubmitCrmLead({ loading: false, saving: true })).toBe(false);
+    expect(canSubmitCrmLead({ loading: false, saving: false })).toBe(true);
+  });
+
+  it("ignores an older pipeline snapshot after canonical reload starts", () => {
+    const requests = new PipelineRequestTracker();
+    const initialSnapshot = requests.start();
+    const canonicalReload = requests.start();
+
+    expect(requests.isCurrent(initialSnapshot)).toBe(false);
+    expect(requests.isCurrent(canonicalReload)).toBe(true);
+  });
+
+  it("builds a unique move label containing the lead contact name", () => {
+    expect(getMoveLeadAriaLabel("Ana Souza", "lead-1")).toBe("Mover Ana Souza (lead-1) para outra etapa");
+    expect(getMoveLeadAriaLabel("Ana Souza", "lead-2")).not.toBe(
+      getMoveLeadAriaLabel("Ana Souza", "lead-1"),
+    );
   });
 });
 

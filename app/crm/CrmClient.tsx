@@ -1,10 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, LayoutDashboard, LoaderCircle, Plus, RefreshCw } from "lucide-react";
 import {
+  PipelineRequestTracker,
+  addMovingLead,
+  canSubmitCrmLead,
+  getMoveLeadAriaLabel,
   getCrmPipelineViewLabels,
   loadCrmPipeline,
+  removeMovingLead,
   requestLeadMove,
   submitCrmLead,
 } from "@/lib/crm-client-state";
@@ -29,24 +34,30 @@ export default function CrmClient({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [movingLeadId, setMovingLeadId] = useState<string | null>(null);
+  const [movingLeadIds, setMovingLeadIds] = useState<Set<string>>(new Set());
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [source, setSource] = useState<LeadSource>("manual");
+  const pipelineRequests = useRef(new PipelineRequestTracker());
 
   const loadPipeline = useCallback(async () => {
+    const requestGeneration = pipelineRequests.current.start();
     setLoading(true);
     setError(null);
 
     try {
       const pipeline = await loadCrmPipeline(fetch);
+      if (!pipelineRequests.current.isCurrent(requestGeneration)) return;
       setStages(pipeline.stages);
       setLeads(pipeline.leads);
     } catch (loadError) {
+      if (!pipelineRequests.current.isCurrent(requestGeneration)) return;
       setError(loadError instanceof Error ? loadError.message : "Não foi possível carregar o CRM.");
     } finally {
-      setLoading(false);
+      if (pipelineRequests.current.isCurrent(requestGeneration)) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -56,9 +67,11 @@ export default function CrmClient({
 
   const columns = useMemo(() => buildPipelineColumns(stages, leads), [stages, leads]);
   const viewLabels = getCrmPipelineViewLabels({ loading, error, columnCount: columns.length });
+  const submitDisabled = !canSubmitCrmLead({ loading, saving });
 
   async function createLead(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitDisabled) return;
     setError(null);
 
     if (!phone.trim() && !email.trim()) {
@@ -71,13 +84,12 @@ export default function CrmClient({
       await submitCrmLead(
         fetch,
         { name, phone, email, source },
-        new Date().toISOString(),
-        (createdLead, resetForm) => {
-          setLeads((currentLeads) => [createdLead, ...currentLeads]);
+        async (resetForm) => {
           setName(resetForm.name);
           setPhone(resetForm.phone);
           setEmail(resetForm.email);
           setSource(resetForm.source);
+          await loadPipeline();
         },
       );
     } catch (createError) {
@@ -89,7 +101,7 @@ export default function CrmClient({
 
   async function moveLead(leadId: string, stageId: string) {
     setError(null);
-    setMovingLeadId(leadId);
+    setMovingLeadIds((currentLeadIds) => addMovingLead(currentLeadIds, leadId));
 
     try {
       await requestLeadMove(fetch, leadId, stageId, (updatedLeadId, updatedStageId) => {
@@ -100,7 +112,7 @@ export default function CrmClient({
     } catch (moveError) {
       setError(moveError instanceof Error ? moveError.message : "Não foi possível mover o lead.");
     } finally {
-      setMovingLeadId(null);
+      setMovingLeadIds((currentLeadIds) => removeMovingLead(currentLeadIds, leadId));
     }
   }
 
@@ -175,7 +187,7 @@ export default function CrmClient({
             </label>
             <button
               type="submit"
-              disabled={saving}
+              disabled={submitDisabled}
               className="inline-flex items-center justify-center gap-2 border border-[#00E676] bg-[#00E676] px-4 py-2 text-sm font-semibold text-[#071109] transition-colors hover:bg-transparent hover:text-[#00E676] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}
@@ -235,7 +247,8 @@ export default function CrmClient({
                         Mover para
                         <select
                           value={lead.stage_id}
-                          disabled={movingLeadId === lead.id}
+                          aria-label={getMoveLeadAriaLabel(lead.contact_name, lead.id)}
+                          disabled={movingLeadIds.has(lead.id)}
                           onChange={(event) => void moveLead(lead.id, event.target.value)}
                           className="border border-[#2A2F2A] bg-[#10120F] px-2 py-2 text-xs text-white outline-none focus:border-[#00E676] disabled:cursor-not-allowed disabled:opacity-50"
                         >

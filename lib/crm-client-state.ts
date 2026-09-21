@@ -9,7 +9,7 @@ export type LeadForm = {
   source: LeadSource;
 };
 
-type CreatedLeadResponse = Pick<CrmLead, "id" | "contact_id" | "stage_id">;
+type UpdatedLeadResponse = Pick<CrmLead, "id" | "stage_id">;
 
 export const emptyLeadForm: LeadForm = {
   name: "",
@@ -17,6 +17,37 @@ export const emptyLeadForm: LeadForm = {
   email: "",
   source: "manual",
 };
+
+export class PipelineRequestTracker {
+  private currentGeneration = 0;
+
+  start(): number {
+    this.currentGeneration += 1;
+    return this.currentGeneration;
+  }
+
+  isCurrent(generation: number): boolean {
+    return generation === this.currentGeneration;
+  }
+}
+
+export function canSubmitCrmLead({ loading, saving }: { loading: boolean; saving: boolean }): boolean {
+  return !loading && !saving;
+}
+
+export function addMovingLead(currentLeadIds: Set<string>, leadId: string): Set<string> {
+  return new Set(currentLeadIds).add(leadId);
+}
+
+export function removeMovingLead(currentLeadIds: Set<string>, leadId: string): Set<string> {
+  const nextLeadIds = new Set(currentLeadIds);
+  nextLeadIds.delete(leadId);
+  return nextLeadIds;
+}
+
+export function getMoveLeadAriaLabel(contactName: string, leadId: string): string {
+  return `Mover ${contactName || "contato sem nome"} (${leadId}) para outra etapa`;
+}
 
 export async function loadCrmPipeline(fetcher: CrmFetcher): Promise<{
   stages: CrmStage[];
@@ -42,32 +73,20 @@ export async function loadCrmPipeline(fetcher: CrmFetcher): Promise<{
 export async function submitCrmLead(
   fetcher: CrmFetcher,
   form: LeadForm,
-  createdAt: string,
-  applyCreatedLead: (lead: CrmLead, resetForm: LeadForm) => void,
+  reloadCanonicalPipeline: (resetForm: LeadForm) => void | Promise<void>,
 ): Promise<void> {
   const response = await fetcher("/api/crm/leads", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(form),
   });
-  const data = await response.json().catch(() => null) as { lead?: CreatedLeadResponse; error?: string } | null;
+  const data = await response.json().catch(() => null) as { lead?: UpdatedLeadResponse; error?: string } | null;
 
   if (!response.ok || !data?.lead) {
     throw new Error(data?.error ?? "Não foi possível criar o lead.");
   }
 
-  applyCreatedLead(
-    {
-      ...data.lead,
-      source: form.source,
-      status: "open",
-      contact_name: form.name.trim(),
-      contact_phone: form.phone.trim() || null,
-      contact_email: form.email.trim() || null,
-      created_at: createdAt,
-    },
-    emptyLeadForm,
-  );
+  await reloadCanonicalPipeline(emptyLeadForm);
 }
 
 export async function requestLeadMove(
@@ -81,13 +100,13 @@ export async function requestLeadMove(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ stage_id: stageId }),
   });
-  const data = await response.json().catch(() => null) as { error?: string } | null;
+  const data = await response.json().catch(() => null) as { lead?: UpdatedLeadResponse; error?: string } | null;
 
-  if (!response.ok) {
+  if (!response.ok || !data?.lead) {
     throw new Error(data?.error ?? "Não foi possível mover o lead.");
   }
 
-  applyMove(leadId, stageId);
+  applyMove(data.lead.id, data.lead.stage_id);
 }
 
 export function getCrmPipelineViewLabels({
