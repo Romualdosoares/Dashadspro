@@ -3565,6 +3565,10 @@ export default function DashAdsPro({ accountInfo }: { accountInfo?: AccountInfo 
                     <Shield size={14} className="sm:w-4 sm:h-4" />
                   </a>
                 )}
+                <a href="/crm" title="CRM"
+                  className="p-2 sm:p-2.5 rounded-xl bg-[#0c0c0c] border border-[#39FF14]/20 text-[#39FF14] hover:bg-[#39FF14]/10 transition-all">
+                  <Columns3 size={14} className="sm:w-4 sm:h-4" />
+                </a>
                 <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-[#39FF14] to-[#1a8a0a] flex items-center justify-center text-black font-bold text-xs sm:text-sm shadow-lg shadow-[#39FF14]/20 shrink-0">
                   {initials}
                 </div>
