@@ -213,12 +213,17 @@ describe("admin feature management routes", () => {
       data: [{ id: "feature-crm", key: "crm" }, { id: "feature-sites", key: "site_builder" }],
       error: null,
     });
+    const existing = query({
+      data: [{ feature_id: "feature-crm" }, { feature_id: "feature-ads" }],
+      error: null,
+    });
+    const inserts = query({ data: null, error: null });
     const deletes = query({ data: null, error: null });
+    let accessQuery = 0;
     createAdminClient.mockReturnValue({
-      from: vi.fn((table: string) => ({
-        product_features: catalog,
-        organization_feature_accesses: deletes,
-      })[table]),
+      from: vi.fn((table: string) => table === "product_features"
+        ? catalog
+        : [existing, inserts, deletes][accessQuery++]),
     });
 
     const response = await replaceOrganizationFeatures(
@@ -233,10 +238,44 @@ describe("admin feature management routes", () => {
     expect(deletes.delete).toHaveBeenCalledOnce();
     expect(deletes.eq).toHaveBeenCalledWith("organization_id", organizationId);
     expect(deletes.eq).not.toHaveBeenCalledWith("organization_id", otherOrganizationId);
-    expect(deletes.insert).toHaveBeenCalledWith([
-      { organization_id: organizationId, feature_id: "feature-crm" },
+    expect(deletes.in).toHaveBeenCalledWith("feature_id", ["feature-ads"]);
+    expect(inserts.insert).toHaveBeenCalledWith([
       { organization_id: organizationId, feature_id: "feature-sites" },
     ]);
+  });
+
+  it("preserves existing target grants when adding a feature fails", async () => {
+    adminAccess();
+    const catalog = query({
+      data: [{ id: "feature-crm", key: "crm" }, { id: "feature-sites", key: "site_builder" }],
+      error: null,
+    });
+    const existing = query({ data: [{ feature_id: "feature-crm" }], error: null });
+    const insertFailure = query({ data: null, error: { message: "write failed" } });
+    const deletions = query({ data: null, error: null });
+    const accesses = {
+      select: vi.fn(() => existing),
+      insert: vi.fn(() => insertFailure),
+      delete: vi.fn(() => deletions),
+    };
+    createAdminClient.mockReturnValue({
+      from: vi.fn((table: string) => table === "product_features" ? catalog : accesses),
+    });
+
+    const response = await replaceOrganizationFeatures(
+      new Request(`http://localhost/api/admin/organizations/${organizationId}/features`, {
+        method: "PUT",
+        body: JSON.stringify({ featureKeys: ["crm", "site_builder"] }),
+      }),
+      { params: Promise.resolve({ organizationId }) },
+    );
+
+    expect(response.status).toBe(500);
+    expect(existing.eq).toHaveBeenCalledWith("organization_id", organizationId);
+    expect(accesses.insert).toHaveBeenCalledWith([
+      { organization_id: organizationId, feature_id: "feature-sites" },
+    ]);
+    expect(accesses.delete).not.toHaveBeenCalled();
   });
 
   it("rejects invalid, duplicate, and unknown replacement keys before deletion", async () => {

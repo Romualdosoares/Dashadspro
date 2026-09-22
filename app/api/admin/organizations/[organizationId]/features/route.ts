@@ -4,6 +4,7 @@ import { FEATURE_KEYS, type FeatureKey } from "../../../../../../lib/feature-cat
 import { createAdminClient } from "../../../../../../lib/supabase/server";
 
 type FeatureGrantRow = { feature?: { key?: unknown } | null };
+type FeatureAssignmentRow = { feature_id?: unknown };
 
 async function parseBody(request: Request): Promise<unknown | null> {
   try {
@@ -73,33 +74,52 @@ export async function PUT(
 
   const { organizationId } = await params;
   const admin = createAdminClient();
-  const { data: catalogFeatures, error: catalogError } = parsed.keys.length === 0
-    ? { data: [], error: null }
-    : await admin
-      .from("product_features")
-      .select("id, key")
-      .in("key", parsed.keys);
+  const [catalogResult, assignmentsResult] = await Promise.all([
+    parsed.keys.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : admin
+        .from("product_features")
+        .select("id, key")
+        .in("key", parsed.keys),
+    admin
+      .from("organization_feature_accesses")
+      .select("feature_id")
+      .eq("organization_id", organizationId),
+  ]);
+  const catalogFeatures = catalogResult.data;
 
-  if (catalogError || (catalogFeatures?.length ?? 0) !== parsed.keys.length) {
+  if (catalogResult.error || assignmentsResult.error || (catalogFeatures?.length ?? 0) !== parsed.keys.length) {
     return NextResponse.json({ error: "Feature não suportada" }, { status: 400 });
   }
 
-  const { error: deleteError } = await admin
-    .from("organization_feature_accesses")
-    .delete()
-    .eq("organization_id", organizationId);
-  if (deleteError) {
-    return NextResponse.json({ error: "Could not replace organization features" }, { status: 500 });
-  }
+  const currentFeatureIds = new Set(
+    ((assignmentsResult.data ?? []) as FeatureAssignmentRow[]).flatMap(({ feature_id }) =>
+      typeof feature_id === "string" ? [feature_id] : [],
+    ),
+  );
+  const desiredFeatureIds = new Set(catalogFeatures?.map((feature) => feature.id) ?? []);
+  const additions = (catalogFeatures ?? []).filter((feature) => !currentFeatureIds.has(feature.id));
+  const removals = [...currentFeatureIds].filter((featureId) => !desiredFeatureIds.has(featureId));
 
-  if (catalogFeatures && catalogFeatures.length > 0) {
+  if (additions.length > 0) {
     const { error: insertError } = await admin
       .from("organization_feature_accesses")
-      .insert(catalogFeatures.map((feature) => ({
+      .insert(additions.map((feature) => ({
         organization_id: organizationId,
         feature_id: feature.id,
       })));
     if (insertError) {
+      return NextResponse.json({ error: "Could not replace organization features" }, { status: 500 });
+    }
+  }
+
+  if (removals.length > 0) {
+    const { error: deleteError } = await admin
+      .from("organization_feature_accesses")
+      .delete()
+      .eq("organization_id", organizationId)
+      .in("feature_id", removals);
+    if (deleteError) {
       return NextResponse.json({ error: "Could not replace organization features" }, { status: 500 });
     }
   }
