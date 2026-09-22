@@ -50,7 +50,7 @@ describe("CRM API routes", () => {
   it("returns 401 from CRM context without authenticated user", async () => {
     requireActiveOrganization.mockResolvedValue({ supabase: {}, user: null, organizationId: null });
 
-    const response = await getContext();
+    const response = await getContext(new Request("http://localhost/api/crm/context"));
 
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: "Unauthorized" });
@@ -63,7 +63,7 @@ describe("CRM API routes", () => {
       organizationId: null,
     });
 
-    const response = await getContext();
+    const response = await getContext(new Request("http://localhost/api/crm/context"));
 
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "Organization membership required" });
@@ -85,7 +85,7 @@ describe("CRM API routes", () => {
     };
     requireActiveOrganization.mockResolvedValue(activeAccess(supabase));
 
-    const response = await getContext();
+    const response = await getContext(new Request("http://localhost/api/crm/context"));
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
@@ -185,7 +185,7 @@ describe("CRM API routes", () => {
     const supabase = { from: vi.fn(() => leads) };
     requireActiveOrganization.mockResolvedValue(activeAccess(supabase));
 
-    const response = await getLeads();
+    const response = await getLeads(new Request("http://localhost/api/crm/leads"));
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({

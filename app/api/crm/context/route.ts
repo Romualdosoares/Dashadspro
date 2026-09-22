@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { requireActiveOrganization } from "../../../../lib/organization-access";
 import { getPlatformRole } from "../../../../lib/auth-role";
 
-export async function GET(request?: Request) {
+export async function GET(request: Request) {
   try {
-    const requestedOrganizationId = request
+    const requestedOrganizationId = request?.url
       ? new URL(request.url).searchParams.get("organization_id")
       : null;
     const { supabase, user, organizationId } = await requireActiveOrganization(requestedOrganizationId);

@@ -13,11 +13,11 @@ function accessError(user: unknown, organizationId: string | null) {
   return null;
 }
 
-function requestedOrganizationId(request?: Request): string | null {
+function requestedOrganizationId(request: Request): string | null {
   return request ? new URL(request.url).searchParams.get("organization_id") : null;
 }
 
-export async function GET(request?: Request) {
+export async function GET(request: Request) {
   try {
     const { supabase, user, organizationId } = await requireActiveOrganization(requestedOrganizationId(request));
     const errorResponse = accessError(user, organizationId);
