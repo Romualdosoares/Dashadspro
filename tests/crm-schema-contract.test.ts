@@ -114,4 +114,19 @@ describe("CRM Phase 1 schema migration", () => {
       expect(sql).toMatch(new RegExp(`CREATE POLICY "organization members manage ${name}"`, "i"));
     }
   });
+
+  it("serializes same-organization lead contact matching before identity row locks", () => {
+    const sql = readMigration();
+    const createLeadBody = sql.match(
+      /CREATE OR REPLACE FUNCTION public\.create_crm_lead\([\s\S]*?AS \$\$([\s\S]*?)\$\$;/i,
+    )?.[1];
+
+    expect(createLeadBody).toBeDefined();
+    expect(createLeadBody).toMatch(
+      /PERFORM pg_advisory_xact_lock\(hashtextextended\(target_organization_id::text, 0\)\);/i,
+    );
+    expect(createLeadBody!.indexOf("pg_advisory_xact_lock")).toBeLessThan(
+      createLeadBody!.indexOf("FOR UPDATE"),
+    );
+  });
 });

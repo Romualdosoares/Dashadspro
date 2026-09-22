@@ -386,6 +386,11 @@ BEGIN
     RAISE EXCEPTION 'Invalid lead source' USING ERRCODE = '22023';
   END IF;
 
+  -- Serialize normalized phone/email matching per organization. A lock keyed to
+  -- one identity pair cannot prevent crossed pairs from locking contacts in
+  -- opposite orders; the organization UUID plus fixed seed is deterministic.
+  PERFORM pg_advisory_xact_lock(hashtextextended(target_organization_id::text, 0));
+
   SELECT id
     INTO initial_stage_id
     FROM public.crm_pipeline_stages
