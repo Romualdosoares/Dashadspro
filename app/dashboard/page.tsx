@@ -1,18 +1,16 @@
 import { redirect } from "next/navigation";
 import { getPlatformRole } from "@/lib/auth-role";
-import { createClient } from "@/lib/supabase/server";
+import FeatureAccessDenied from "@/components/FeatureAccessDenied";
+import { requireOrganizationFeature } from "@/lib/feature-access";
 import DashboardClient from "./DashboardClient";
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
+  const access = await requireOrganizationFeature("dashboard_ads");
+  if (!access.ok) {
+    if (access.status === 401) redirect("/login");
+    return <FeatureAccessDenied error={access.error} />;
   }
+  const { user } = access;
 
   const meta = user.user_metadata ?? {};
   const isFacebook = user.app_metadata?.provider === "facebook";

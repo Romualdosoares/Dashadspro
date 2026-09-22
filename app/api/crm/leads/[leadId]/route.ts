@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireActiveOrganization } from "../../../../../lib/organization-access";
+import { requireOrganizationFeature } from "../../../../../lib/feature-access";
 import { validateLeadStageUpdate, validateLeadUpdatedAt } from "../../../../../lib/crm-validation";
 
 type RouteContext = { params: Promise<{ leadId: string }> };
@@ -7,16 +7,9 @@ type RouteContext = { params: Promise<{ leadId: string }> };
 export async function PATCH(request: Request, { params }: RouteContext) {
   try {
     const requestedOrganizationId = new URL(request.url).searchParams.get("organization_id");
-    const { supabase, user, organizationId } = await requireActiveOrganization(requestedOrganizationId);
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    if (!organizationId) {
-      return NextResponse.json(
-        { error: "Organization membership required" },
-        { status: 409 },
-      );
-    }
+    const access = await requireOrganizationFeature("crm", requestedOrganizationId);
+    if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
+    const { supabase, organizationId } = access;
 
     const { leadId } = await params;
     if (!validateLeadStageUpdate(leadId).ok) {

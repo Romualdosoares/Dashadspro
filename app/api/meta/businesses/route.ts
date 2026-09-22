@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireOrganizationFeature } from "../../../../lib/feature-access";
 import { getFacebookToken } from "@/lib/meta-token";
 import {
   fetchUserBusinesses,
@@ -7,18 +7,13 @@ import {
   fetchBusinessAdAccounts,
 } from "@/lib/meta-api";
 
-export async function GET() {
-  const supabase = await createClient();
+export async function GET(request: Request) {
+  const requestedOrganizationId = new URL(request.url).searchParams.get("organization_id");
+  const access = await requireOrganizationFeature("dashboard_ads", requestedOrganizationId);
+  if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
+  const { user } = access;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { token: accessToken } = await getFacebookToken();
+  const { token: accessToken } = await getFacebookToken(user);
 
   if (!accessToken) {
     return NextResponse.json(

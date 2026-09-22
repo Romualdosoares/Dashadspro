@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireActiveOrganization } from "../../../../lib/organization-access";
+import { requireOrganizationFeature } from "../../../../lib/feature-access";
 import { getPlatformRole } from "../../../../lib/auth-role";
 
 export async function GET(request: Request) {
@@ -7,18 +7,9 @@ export async function GET(request: Request) {
     const requestedOrganizationId = request?.url
       ? new URL(request.url).searchParams.get("organization_id")
       : null;
-    const { supabase, user, organizationId } = await requireActiveOrganization(requestedOrganizationId);
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    if (!organizationId) {
-      return NextResponse.json(
-        { error: "Organization membership required" },
-        { status: 409 },
-      );
-    }
+    const access = await requireOrganizationFeature("crm", requestedOrganizationId);
+    if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
+    const { supabase, user, organizationId } = access;
 
     const isPlatformAdmin = getPlatformRole(user) === "admin";
     const [membershipResult, organizationResult, stagesResult, organizationsResult] = await Promise.all([

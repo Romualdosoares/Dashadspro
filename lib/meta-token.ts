@@ -1,9 +1,17 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { decryptSecret } from "@/lib/secret-storage";
 
-export async function getFacebookToken(): Promise<{ token: string | null; userId: string | null }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+type TokenUser = { id: string };
+
+export async function getFacebookToken(
+  authenticatedUser?: TokenUser | null,
+): Promise<{ token: string | null; userId: string | null }> {
+  let user = authenticatedUser;
+  if (user === undefined) {
+    const supabase = await createClient();
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  }
   if (!user) return { token: null, userId: null };
 
   const adminClient = createAdminClient();
