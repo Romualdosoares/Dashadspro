@@ -1,17 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireActiveOrganization } from "../../../../lib/organization-access";
+import { requireOrganizationFeature } from "../../../../lib/feature-access";
 import { validateLeadCreate } from "../../../../lib/crm-validation";
-
-function accessError(user: unknown, organizationId: string | null) {
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!organizationId) {
-    return NextResponse.json(
-      { error: "Organization membership required" },
-      { status: 409 },
-    );
-  }
-  return null;
-}
 
 function requestedOrganizationId(request: Request): string | null {
   return request ? new URL(request.url).searchParams.get("organization_id") : null;
@@ -19,15 +8,9 @@ function requestedOrganizationId(request: Request): string | null {
 
 export async function GET(request: Request) {
   try {
-    const { supabase, user, organizationId } = await requireActiveOrganization(requestedOrganizationId(request));
-    const errorResponse = accessError(user, organizationId);
-    if (errorResponse) return errorResponse;
-    if (!organizationId) {
-      return NextResponse.json(
-        { error: "Organization membership required" },
-        { status: 409 },
-      );
-    }
+    const access = await requireOrganizationFeature("crm", requestedOrganizationId(request));
+    if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
+    const { supabase, organizationId } = access;
 
     const { data, error } = await supabase
       .from("crm_leads")
@@ -63,15 +46,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { supabase, user, organizationId } = await requireActiveOrganization(requestedOrganizationId(request));
-    const errorResponse = accessError(user, organizationId);
-    if (errorResponse) return errorResponse;
-    if (!organizationId) {
-      return NextResponse.json(
-        { error: "Organization membership required" },
-        { status: 409 },
-      );
-    }
+    const access = await requireOrganizationFeature("crm", requestedOrganizationId(request));
+    if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
+    const { supabase, organizationId } = access;
 
     const input = await request.json().catch(() => null);
     const validation = validateLeadCreate(input);

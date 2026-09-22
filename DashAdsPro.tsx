@@ -2964,7 +2964,13 @@ function AutoRulesPanel({
 
 // ─── Principal ──────────────────────────────────────────────────────────────
 
-export default function DashAdsPro({ accountInfo }: { accountInfo?: AccountInfo }) {
+export default function DashAdsPro({
+  accountInfo,
+  headerNavigation,
+}: {
+  accountInfo?: AccountInfo;
+  headerNavigation?: React.ReactNode;
+}) {
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
   const [datePreset, setDatePreset] = useState("today");
@@ -3585,6 +3591,8 @@ export default function DashAdsPro({ accountInfo }: { accountInfo?: AccountInfo 
               </div>
             </div>
           </div>
+
+          {headerNavigation}
 
           {/* Mobile tabs — scroll horizontal compacta no header */}
           <div className="md:hidden mt-2">

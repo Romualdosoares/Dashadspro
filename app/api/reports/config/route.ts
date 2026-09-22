@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
+import { requireOrganizationFeature } from "../../../../lib/feature-access";
 import { encryptSecret } from "@/lib/secret-storage";
 import { normalizeBrazilianPhone } from "@/lib/report-schedule";
 
@@ -16,10 +17,11 @@ function validTimeZone(value: string): boolean {
   }
 }
 
-export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET(request: Request) {
+  const requestedOrganizationId = new URL(request.url).searchParams.get("organization_id");
+  const access = await requireOrganizationFeature("dashboard_ads", requestedOrganizationId);
+  if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
+  const { supabase, user } = access;
 
   const { data, error } = await supabase
     .from("whatsapp_reports")
@@ -36,9 +38,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const requestedOrganizationId = new URL(request.url).searchParams.get("organization_id");
+  const access = await requireOrganizationFeature("dashboard_ads", requestedOrganizationId);
+  if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
+  const { user } = access;
 
   let body: Record<string, unknown>;
   try {

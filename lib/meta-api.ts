@@ -1,5 +1,26 @@
-import type { MetaBusiness, MetaAdAccount, MetaApiResponse, AdInsights } from "./types";
+import type { MetaBusiness, MetaAdAccount, AdInsights } from "./types";
 import { GRAPH_BASE } from "./meta-config";
+
+export class MetaApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = "MetaApiError";
+  }
+}
+
+async function fetchMetaCollection<T>(url: string): Promise<T[]> {
+  const res = await fetch(url, { cache: "no-store" });
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok || data.error) {
+    throw new MetaApiError(
+      data.error?.message ?? `Meta API HTTP ${res.status}`,
+      res.status,
+    );
+  }
+
+  return data.data ?? [];
+}
 
 /** Build Meta API date query param string.
  *  Preset "custom:YYYY-MM-DD:YYYY-MM-DD" → time_range; otherwise → date_preset */
@@ -12,44 +33,35 @@ export function buildDateParam(preset: string): string {
 }
 
 export async function fetchUserBusinesses(accessToken: string): Promise<MetaBusiness[]> {
-  try {
-    const url = `${GRAPH_BASE}/me/businesses?fields=id,name&limit=200&access_token=${accessToken}`;
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) return [];
-    const data: MetaApiResponse<MetaBusiness> = await res.json();
-    return data.data ?? [];
-  } catch {
-    return [];
-  }
+  const url = `${GRAPH_BASE}/me/businesses?fields=id,name&limit=200&access_token=${accessToken}`;
+  return fetchMetaCollection<MetaBusiness>(url);
 }
 
 export async function fetchUserAdAccounts(accessToken: string): Promise<MetaAdAccount[]> {
-  try {
-    const fields = "id,name,account_status,currency";
-    const url = `${GRAPH_BASE}/me/adaccounts?fields=${fields}&limit=200&access_token=${accessToken}`;
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) return [];
-    const data: MetaApiResponse<MetaAdAccount> = await res.json();
-    return data.data ?? [];
-  } catch {
-    return [];
-  }
+  const fields = "id,name,account_status,currency";
+  const url = `${GRAPH_BASE}/me/adaccounts?fields=${fields}&limit=200&access_token=${accessToken}`;
+  return fetchMetaCollection<MetaAdAccount>(url);
 }
 
 export async function fetchBusinessAdAccounts(
   businessId: string,
   accessToken: string
 ): Promise<MetaAdAccount[]> {
-  try {
-    const fields = "id,name,account_status,currency";
-    const url = `${GRAPH_BASE}/${businessId}/owned_ad_accounts?fields=${fields}&limit=200&access_token=${accessToken}`;
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) return [];
-    const data: MetaApiResponse<MetaAdAccount> = await res.json();
-    return data.data ?? [];
-  } catch {
-    return [];
+  const fields = "id,name,account_status,currency";
+  const [ownedAccounts, clientAccounts] = await Promise.all([
+    fetchMetaCollection<MetaAdAccount>(
+      `${GRAPH_BASE}/${businessId}/owned_ad_accounts?fields=${fields}&limit=200&access_token=${accessToken}`,
+    ),
+    fetchMetaCollection<MetaAdAccount>(
+      `${GRAPH_BASE}/${businessId}/client_ad_accounts?fields=${fields}&limit=200&access_token=${accessToken}`,
+    ),
+  ]);
+
+  const accounts = new Map<string, MetaAdAccount>();
+  for (const account of [...ownedAccounts, ...clientAccounts]) {
+    if (!accounts.has(account.id)) accounts.set(account.id, account);
   }
+  return [...accounts.values()];
 }
 
 export async function fetchAdAccountInsights(

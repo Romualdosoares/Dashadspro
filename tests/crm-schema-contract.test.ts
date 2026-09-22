@@ -3,9 +3,14 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const migrationPath = resolve(process.cwd(), "supabase-crm-phase-1.sql");
+const featureAccessMigrationPath = resolve(process.cwd(), "supabase-feature-access.sql");
 
 function readMigration() {
   return readFileSync(migrationPath, "utf8");
+}
+
+function readFeatureAccessMigration() {
+  return readFileSync(featureAccessMigrationPath, "utf8");
 }
 
 describe("CRM Phase 1 schema migration", () => {
@@ -128,5 +133,73 @@ describe("CRM Phase 1 schema migration", () => {
     expect(createLeadBody!.indexOf("pg_advisory_xact_lock")).toBeLessThan(
       createLeadBody!.indexOf("FOR UPDATE"),
     );
+  });
+});
+
+describe("organization feature access schema migration", () => {
+  it("defines idempotent catalog and organization access tables", () => {
+    const sql = readFeatureAccessMigration();
+
+    expect(sql).toMatch(/\bBEGIN\s*;/i);
+    expect(sql).toMatch(/\bCOMMIT\s*;/i);
+    expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS public\.product_features/i);
+    expect(sql).toMatch(/id\s+uuid\s+PRIMARY KEY/i);
+    expect(sql).toMatch(/key\s+text\s+NOT NULL\s+UNIQUE/i);
+    expect(sql).toMatch(/name\s+text\s+NOT NULL/i);
+    expect(sql).toMatch(/description\s+text\s+NOT NULL\s+DEFAULT ''/i);
+    expect(sql).toMatch(/status\s+text\s+NOT NULL\s+DEFAULT 'active'\s+CHECK\s*\(status IN \('active', 'archived'\)\)/i);
+    expect(sql).toMatch(/position\s+integer\s+NOT NULL\s+DEFAULT 0\s+CHECK\s*\(position >= 0\)/i);
+    expect(sql).toMatch(/created_at\s+timestamptz\s+NOT NULL\s+DEFAULT now\(\)/i);
+    expect(sql).toMatch(/updated_at\s+timestamptz\s+NOT NULL\s+DEFAULT now\(\)/i);
+    expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.set_product_features_updated_at\(\)[\s\S]*?NEW\.updated_at := now\(\)/i);
+    expect(sql).toMatch(/CREATE TRIGGER product_features_set_updated_at\s+BEFORE UPDATE ON public\.product_features[\s\S]*?EXECUTE FUNCTION public\.set_product_features_updated_at\(\)/i);
+
+    expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS public\.organization_feature_accesses/i);
+    expect(sql).toMatch(/organization_id\s+uuid\s+NOT NULL\s+REFERENCES public\.organizations\(id\)/i);
+    expect(sql).toMatch(/feature_id\s+uuid\s+NOT NULL\s+REFERENCES public\.product_features\(id\)/i);
+    expect(sql).toContain("UNIQUE (organization_id, feature_id)");
+  });
+
+  it("seeds ordered catalog values without reactivating archived features", () => {
+    const sql = readFeatureAccessMigration();
+
+    expect(sql).toMatch(/INSERT INTO public\.product_features \(key, name, description, status, position\)[\s\S]*?'dashboard_ads'[\s\S]*?'crm'[\s\S]*?'site_builder'[\s\S]*?ON CONFLICT \(key\) DO UPDATE/i);
+    expect(sql).toMatch(/^\s*\('dashboard_ads',[^)]*'active', 10\),/im);
+    expect(sql).toMatch(/^\s*\('crm',[^)]*'active', 20\),/im);
+    expect(sql).toMatch(/^\s*\('site_builder',[^)]*'active', 30\)/im);
+    expect(sql).toMatch(/ON CONFLICT \(key\) DO UPDATE\s+SET\s+name = EXCLUDED\.name,\s+description = EXCLUDED\.description,\s+position = EXCLUDED\.position,/i);
+    expect(sql).toMatch(/WHEN public\.product_features\.status = 'archived' THEN 'archived'/i);
+    expect(sql).toMatch(/CREATE INDEX IF NOT EXISTS product_features_status_position_idx\s+ON public\.product_features \(status, position\)/i);
+    expect(sql).toMatch(/CREATE INDEX IF NOT EXISTS organization_feature_accesses_organization_idx\s+ON public\.organization_feature_accesses \(organization_id\)/i);
+  });
+
+  it("enables RLS with member reads and JWT-admin writes", () => {
+    const sql = readFeatureAccessMigration();
+    const jwtAdmin = "auth\\.jwt\\(\\)\\s*->\\s*'app_metadata'\\s*->>\\s*'role'\\s*=\\s*'admin'";
+
+    expect(sql).toMatch(/ALTER TABLE public\.product_features ENABLE ROW LEVEL SECURITY/i);
+    expect(sql).toMatch(/ALTER TABLE public\.organization_feature_accesses ENABLE ROW LEVEL SECURITY/i);
+    for (const [table, policy] of [
+      ["product_features", "product_features_authenticated_read"],
+      ["product_features", "product_features_admin_write"],
+      ["organization_feature_accesses", "organization_feature_accesses_member_read"],
+      ["organization_feature_accesses", "organization_feature_accesses_admin_write"],
+    ]) {
+      expect(sql).toMatch(new RegExp(`DROP POLICY IF EXISTS "${policy}" ON public\\.${table}`, "i"));
+    }
+    expect(sql).toMatch(/CREATE POLICY "product_features_authenticated_read"\s+ON public\.product_features FOR SELECT\s+TO authenticated\s+USING \(true\)/i);
+    expect(sql).toMatch(/CREATE POLICY "organization_feature_accesses_member_read"[\s\S]*?ON public\.organization_feature_accesses FOR SELECT[\s\S]*?USING \(public\.can_access_organization\(organization_id\)\)/i);
+
+    for (const [table, policy] of [
+      ["product_features", "product_features_admin_write"],
+      ["organization_feature_accesses", "organization_feature_accesses_admin_write"],
+    ]) {
+      expect(sql).toMatch(
+        new RegExp(
+          `CREATE POLICY "${policy}"[\\s\\S]*?ON public\\.${table} FOR ALL[\\s\\S]*?USING \\(${jwtAdmin}\\)[\\s\\S]*?WITH CHECK \\(${jwtAdmin}\\)`,
+          "i",
+        ),
+      );
+    }
   });
 });

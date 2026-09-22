@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { requireActiveOrganization } = vi.hoisted(() => ({
-  requireActiveOrganization: vi.fn(),
+const { requireOrganizationFeature } = vi.hoisted(() => ({
+  requireOrganizationFeature: vi.fn(),
 }));
 
-vi.mock("../lib/organization-access", () => ({ requireActiveOrganization }));
+vi.mock("../lib/feature-access", () => ({ requireOrganizationFeature }));
 
 import { GET as getContext } from "../app/api/crm/context/route";
 import { GET as getLeads, POST as createLead } from "../app/api/crm/leads/route";
@@ -48,7 +48,7 @@ describe("CRM API routes", () => {
   beforeEach(() => vi.resetAllMocks());
 
   it("returns 401 from CRM context without authenticated user", async () => {
-    requireActiveOrganization.mockResolvedValue({ supabase: {}, user: null, organizationId: null });
+    requireOrganizationFeature.mockResolvedValue({ ok: false, status: 401, error: "Unauthorized" });
 
     const response = await getContext(new Request("http://localhost/api/crm/context"));
 
@@ -57,10 +57,10 @@ describe("CRM API routes", () => {
   });
 
   it("returns 409 from CRM context when user has no organization membership", async () => {
-    requireActiveOrganization.mockResolvedValue({
-      supabase: {},
-      user: { id: "user-1" },
-      organizationId: null,
+    requireOrganizationFeature.mockResolvedValue({
+      ok: false,
+      status: 409,
+      error: "Organization membership required",
     });
 
     const response = await getContext(new Request("http://localhost/api/crm/context"));
@@ -83,7 +83,7 @@ describe("CRM API routes", () => {
         crm_pipeline_stages: stages,
       })[table]),
     };
-    requireActiveOrganization.mockResolvedValue(activeAccess(supabase));
+    requireOrganizationFeature.mockResolvedValue({ ok: true, ...activeAccess(supabase) });
 
     const response = await getContext(new Request("http://localhost/api/crm/context"));
 
@@ -126,7 +126,8 @@ describe("CRM API routes", () => {
         return undefined;
       }),
     };
-    requireActiveOrganization.mockResolvedValue({
+    requireOrganizationFeature.mockResolvedValue({
+      ok: true,
       ...activeAccess(supabase),
       user: { id: "admin-1", app_metadata: { role: "admin" } },
     });
@@ -146,7 +147,7 @@ describe("CRM API routes", () => {
 
   it("forwards organization selection from CRM route query parameters", async () => {
     const from = vi.fn();
-    requireActiveOrganization.mockResolvedValue(activeAccess({ from }));
+    requireOrganizationFeature.mockResolvedValue({ ok: true, ...activeAccess({ from }) });
     const requestedOrganizationId = "550e8400-e29b-41d4-a716-446655440010";
 
     await getLeads(new Request(`http://localhost/api/crm/leads?organization_id=${requestedOrganizationId}`));
@@ -162,9 +163,9 @@ describe("CRM API routes", () => {
       { params: Promise.resolve({ leadId }) },
     );
 
-    expect(requireActiveOrganization).toHaveBeenNthCalledWith(1, requestedOrganizationId);
-    expect(requireActiveOrganization).toHaveBeenNthCalledWith(2, requestedOrganizationId);
-    expect(requireActiveOrganization).toHaveBeenNthCalledWith(3, requestedOrganizationId);
+    expect(requireOrganizationFeature).toHaveBeenNthCalledWith(1, "crm", requestedOrganizationId);
+    expect(requireOrganizationFeature).toHaveBeenNthCalledWith(2, "crm", requestedOrganizationId);
+    expect(requireOrganizationFeature).toHaveBeenNthCalledWith(3, "crm", requestedOrganizationId);
   });
 
   it("returns organization-scoped CRM leads with contact and stage data", async () => {
@@ -183,7 +184,7 @@ describe("CRM API routes", () => {
       error: null,
     });
     const supabase = { from: vi.fn(() => leads) };
-    requireActiveOrganization.mockResolvedValue(activeAccess(supabase));
+    requireOrganizationFeature.mockResolvedValue({ ok: true, ...activeAccess(supabase) });
 
     const response = await getLeads(new Request("http://localhost/api/crm/leads"));
 
@@ -211,7 +212,7 @@ describe("CRM API routes", () => {
       error: null,
     });
     const supabase = { rpc };
-    requireActiveOrganization.mockResolvedValue(activeAccess(supabase));
+    requireOrganizationFeature.mockResolvedValue({ ok: true, ...activeAccess(supabase) });
 
     const response = await createLead(new Request("http://localhost/api/crm/leads", {
       method: "POST",
@@ -234,7 +235,7 @@ describe("CRM API routes", () => {
   it("uses atomic organization-scoped lead RPC so a lead failure cannot mutate a contact", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: null, error: { code: "23503" } });
     const from = vi.fn();
-    requireActiveOrganization.mockResolvedValue(activeAccess({ rpc, from }));
+    requireOrganizationFeature.mockResolvedValue({ ok: true, ...activeAccess({ rpc, from }) });
 
     const response = await createLead(new Request("http://localhost/api/crm/leads", {
       method: "POST",
@@ -259,7 +260,7 @@ describe("CRM API routes", () => {
 
   it("rejects invalid CRM lead input before writing", async () => {
     const from = vi.fn();
-    requireActiveOrganization.mockResolvedValue(activeAccess({ from }));
+    requireOrganizationFeature.mockResolvedValue({ ok: true, ...activeAccess({ from }) });
 
     const response = await createLead(new Request("http://localhost/api/crm/leads", {
       method: "POST",
@@ -274,7 +275,7 @@ describe("CRM API routes", () => {
   it("returns conflict when organization has no pipeline stages", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: null, error: { code: "P0001", message: "Pipeline stage required" } });
     const supabase = { rpc };
-    requireActiveOrganization.mockResolvedValue(activeAccess(supabase));
+    requireOrganizationFeature.mockResolvedValue({ ok: true, ...activeAccess(supabase) });
 
     const response = await createLead(new Request("http://localhost/api/crm/leads", {
       method: "POST",
@@ -288,7 +289,7 @@ describe("CRM API routes", () => {
   it("returns 409 when atomic contact resolution finds conflicting identities", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: null, error: { code: "23505" } });
     const supabase = { rpc };
-    requireActiveOrganization.mockResolvedValue(activeAccess(supabase));
+    requireOrganizationFeature.mockResolvedValue({ ok: true, ...activeAccess(supabase) });
 
     const response = await createLead(new Request("http://localhost/api/crm/leads", {
       method: "POST",
@@ -306,7 +307,7 @@ describe("CRM API routes", () => {
 
   it("does not update leads when route ID is not a UUID", async () => {
     const from = vi.fn();
-    requireActiveOrganization.mockResolvedValue(activeAccess({ from }));
+    requireOrganizationFeature.mockResolvedValue({ ok: true, ...activeAccess({ from }) });
 
     const response = await updateLead(
       new Request("http://localhost/api/crm/leads/not-a-uuid", {
@@ -331,7 +332,7 @@ describe("CRM API routes", () => {
         crm_leads: updatedLead,
       })[table]),
     };
-    requireActiveOrganization.mockResolvedValue(activeAccess(supabase));
+    requireOrganizationFeature.mockResolvedValue({ ok: true, ...activeAccess(supabase) });
 
     const response = await updateLead(
       new Request(`http://localhost/api/crm/leads/${leadId}`, {
@@ -361,7 +362,7 @@ describe("CRM API routes", () => {
         return undefined;
       }),
     };
-    requireActiveOrganization.mockResolvedValue(activeAccess(supabase));
+    requireOrganizationFeature.mockResolvedValue({ ok: true, ...activeAccess(supabase) });
 
     const response = await updateLead(
       new Request(`http://localhost/api/crm/leads/${leadId}`, {
@@ -388,7 +389,7 @@ describe("CRM API routes", () => {
         return undefined;
       }),
     };
-    requireActiveOrganization.mockResolvedValue(activeAccess(supabase));
+    requireOrganizationFeature.mockResolvedValue({ ok: true, ...activeAccess(supabase) });
 
     const response = await updateLead(
       new Request(`http://localhost/api/crm/leads/${leadId}`, {
@@ -405,7 +406,7 @@ describe("CRM API routes", () => {
   it("does not update a lead when destination stage is outside current organization", async () => {
     const destinationStage = query({ data: null, error: null });
     const from = vi.fn(() => destinationStage);
-    requireActiveOrganization.mockResolvedValue(activeAccess({ from }));
+    requireOrganizationFeature.mockResolvedValue({ ok: true, ...activeAccess({ from }) });
 
     const response = await updateLead(
       new Request(`http://localhost/api/crm/leads/${leadId}`, {

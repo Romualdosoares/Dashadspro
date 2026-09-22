@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
+import { requireOrganizationFeature } from "../../../../lib/feature-access";
 import { getFacebookToken } from "@/lib/meta-token";
 import { fetchReportData, buildWhatsAppMessage, sendZapiMessage } from "@/lib/whatsapp-report";
 import { decryptSecret } from "@/lib/secret-storage";
@@ -7,9 +8,10 @@ import { decryptSecret } from "@/lib/secret-storage";
 const DATE_PRESETS = new Set(["today", "yesterday", "last_3d", "last_7d", "last_30d"]);
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const requestedOrganizationId = new URL(request.url).searchParams.get("organization_id");
+  const access = await requireOrganizationFeature("dashboard_ads", requestedOrganizationId);
+  if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
+  const { supabase, user } = access;
 
   // Load user's WhatsApp config
   const { data: config, error: configError } = await supabase
@@ -47,7 +49,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Nenhuma conta de anúncios selecionada" }, { status: 400 });
   }
 
-  const { token } = await getFacebookToken();
+  const { token } = await getFacebookToken(user);
   if (!token) {
     return NextResponse.json({ error: "Token do Facebook não disponível" }, { status: 403 });
   }
