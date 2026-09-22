@@ -8,9 +8,11 @@ import {
   getMoveLeadAriaLabel,
   getCrmPipelineViewLabels,
   isLeadFormDisabled,
+  isOrganizationSelectorDisabled,
   loadCrmPipeline,
   removeMovingLead,
   requestLeadMove,
+  shouldApplyPipelineResponse,
   shouldShowOrganizationSelector,
   submitCrmLead,
   type CrmOrganizationOption,
@@ -44,26 +46,40 @@ export default function CrmClient({
   const [email, setEmail] = useState("");
   const [source, setSource] = useState<LeadSource>("manual");
   const pipelineRequests = useRef(new PipelineRequestTracker());
+  const selectedOrganizationIdRef = useRef<string | undefined>(undefined);
 
-  const loadPipeline = useCallback(async () => {
+  const loadPipeline = useCallback(async (requestOrganizationId = selectedOrganizationId) => {
     const requestGeneration = pipelineRequests.current.start();
     setLoading(true);
     setError(null);
 
     try {
-      const pipeline = await loadCrmPipeline(fetch, selectedOrganizationId);
-      if (!pipelineRequests.current.isCurrent(requestGeneration)) return;
+      const pipeline = await loadCrmPipeline(fetch, requestOrganizationId);
+      if (
+        !pipelineRequests.current.isCurrent(requestGeneration)
+        || !shouldApplyPipelineResponse(requestOrganizationId, selectedOrganizationIdRef.current)
+      ) return;
       setStages(pipeline.stages);
       setLeads(pipeline.leads);
       setOrganizations(pipeline.organizations);
       if (pipeline.organizations.length > 0 && pipeline.organizationId) {
-        setSelectedOrganizationId((currentOrganizationId) => currentOrganizationId ?? pipeline.organizationId ?? undefined);
+        setSelectedOrganizationId((currentOrganizationId) => {
+          const nextOrganizationId = currentOrganizationId ?? pipeline.organizationId ?? undefined;
+          selectedOrganizationIdRef.current = nextOrganizationId;
+          return nextOrganizationId;
+        });
       }
     } catch (loadError) {
-      if (!pipelineRequests.current.isCurrent(requestGeneration)) return;
+      if (
+        !pipelineRequests.current.isCurrent(requestGeneration)
+        || !shouldApplyPipelineResponse(requestOrganizationId, selectedOrganizationIdRef.current)
+      ) return;
       setError(loadError instanceof Error ? loadError.message : "Não foi possível carregar o CRM.");
     } finally {
-      if (pipelineRequests.current.isCurrent(requestGeneration)) {
+      if (
+        pipelineRequests.current.isCurrent(requestGeneration)
+        && shouldApplyPipelineResponse(requestOrganizationId, selectedOrganizationIdRef.current)
+      ) {
         setLoading(false);
       }
     }
@@ -76,6 +92,11 @@ export default function CrmClient({
   const columns = useMemo(() => buildPipelineColumns(stages, leads), [stages, leads]);
   const viewLabels = getCrmPipelineViewLabels({ loading, error, columnCount: columns.length });
   const submitDisabled = isLeadFormDisabled({ loading, saving });
+  const organizationSelectorDisabled = isOrganizationSelectorDisabled({
+    loading,
+    saving,
+    movingLeadCount: movingLeadIds.size,
+  });
 
   async function createLead(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -88,6 +109,7 @@ export default function CrmClient({
     }
 
     setSaving(true);
+    const requestOrganizationId = selectedOrganizationIdRef.current;
     try {
       await submitCrmLead(
         fetch,
@@ -97,12 +119,14 @@ export default function CrmClient({
           setPhone(resetForm.phone);
           setEmail(resetForm.email);
           setSource(resetForm.source);
-          await loadPipeline();
+          await loadPipeline(requestOrganizationId);
         },
-        selectedOrganizationId,
+        requestOrganizationId,
       );
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Não foi possível criar o lead.");
+      if (shouldApplyPipelineResponse(requestOrganizationId, selectedOrganizationIdRef.current)) {
+        setError(createError instanceof Error ? createError.message : "Não foi possível criar o lead.");
+      }
     } finally {
       setSaving(false);
     }
@@ -111,15 +135,19 @@ export default function CrmClient({
   async function moveLead(leadId: string, stageId: string, updatedAt: string) {
     setError(null);
     setMovingLeadIds((currentLeadIds) => addMovingLead(currentLeadIds, leadId));
+    const requestOrganizationId = selectedOrganizationIdRef.current;
 
     try {
       await requestLeadMove(fetch, leadId, stageId, updatedAt, (updatedLeadId, updatedStageId, updatedAt) => {
+        if (!shouldApplyPipelineResponse(requestOrganizationId, selectedOrganizationIdRef.current)) return;
         setLeads((currentLeads) => currentLeads.map((lead) => (
           lead.id === updatedLeadId ? { ...lead, stage_id: updatedStageId, updated_at: updatedAt } : lead
         )));
-      }, selectedOrganizationId);
+      }, requestOrganizationId);
     } catch (moveError) {
-      setError(moveError instanceof Error ? moveError.message : "Não foi possível mover o lead.");
+      if (shouldApplyPipelineResponse(requestOrganizationId, selectedOrganizationIdRef.current)) {
+        setError(moveError instanceof Error ? moveError.message : "Não foi possível mover o lead.");
+      }
     } finally {
       setMovingLeadIds((currentLeadIds) => removeMovingLead(currentLeadIds, leadId));
     }
@@ -139,8 +167,12 @@ export default function CrmClient({
                 Organização ativa
                 <select
                   value={selectedOrganizationId ?? ""}
-                  onChange={(event) => setSelectedOrganizationId(event.target.value || undefined)}
-                  disabled={loading}
+                  onChange={(event) => {
+                    const nextOrganizationId = event.target.value || undefined;
+                    selectedOrganizationIdRef.current = nextOrganizationId;
+                    setSelectedOrganizationId(nextOrganizationId);
+                  }}
+                  disabled={organizationSelectorDisabled}
                   className="border border-[#2A2F2A] bg-[#0B0C0A] px-2 py-2 text-xs text-white outline-none focus:border-[#00E676] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <option value="" disabled>Selecione organização</option>

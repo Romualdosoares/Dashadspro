@@ -41,6 +41,25 @@ export function isLeadFormDisabled({ loading, saving }: { loading: boolean; savi
   return !canSubmitCrmLead({ loading, saving });
 }
 
+export function isOrganizationSelectorDisabled({
+  loading,
+  saving,
+  movingLeadCount,
+}: {
+  loading: boolean;
+  saving: boolean;
+  movingLeadCount: number;
+}): boolean {
+  return loading || saving || movingLeadCount > 0;
+}
+
+export function shouldApplyPipelineResponse(
+  requestOrganizationId: string | undefined,
+  selectedOrganizationId: string | undefined,
+): boolean {
+  return requestOrganizationId === selectedOrganizationId;
+}
+
 export function addMovingLead(currentLeadIds: Set<string>, leadId: string): Set<string> {
   return new Set(currentLeadIds).add(leadId);
 }

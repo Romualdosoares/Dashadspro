@@ -6,11 +6,13 @@ import {
   canSubmitCrmLead,
   getMoveLeadAriaLabel,
   isLeadFormDisabled,
+  isOrganizationSelectorDisabled,
   emptyLeadForm,
   getCrmPipelineViewLabels,
   loadCrmPipeline,
   removeMovingLead,
   requestLeadMove,
+  shouldApplyPipelineResponse,
   shouldShowOrganizationSelector,
   submitCrmLead,
 } from "../lib/crm-client-state";
@@ -157,6 +159,12 @@ describe("CRM client requests", () => {
     expect(movingLeadIds.has("lead-b")).toBe(true);
   });
 
+  it("locks organization selection during save or lead move", () => {
+    expect(isOrganizationSelectorDisabled({ loading: false, saving: true, movingLeadCount: 0 })).toBe(true);
+    expect(isOrganizationSelectorDisabled({ loading: false, saving: false, movingLeadCount: 1 })).toBe(true);
+    expect(isOrganizationSelectorDisabled({ loading: false, saving: false, movingLeadCount: 0 })).toBe(false);
+  });
+
   it("rejects form submission while a pipeline snapshot is loading", () => {
     expect(canSubmitCrmLead({ loading: true, saving: false })).toBe(false);
     expect(canSubmitCrmLead({ loading: false, saving: true })).toBe(false);
@@ -178,6 +186,19 @@ describe("CRM client requests", () => {
     expect(requests.isCurrent(canonicalReload)).toBe(true);
   });
 
+  it("does not let a prior-tenant response replace selected tenant pipeline state", () => {
+    const selectedOrganizationId = "organization-b";
+    const pipelineState = { organizationId: selectedOrganizationId, leadIds: ["lead-b"] };
+    const priorTenantResponse = { organizationId: "organization-a", leadIds: ["lead-a"] };
+
+    if (shouldApplyPipelineResponse(priorTenantResponse.organizationId, selectedOrganizationId)) {
+      pipelineState.organizationId = priorTenantResponse.organizationId;
+      pipelineState.leadIds = priorTenantResponse.leadIds;
+    }
+
+    expect(pipelineState).toEqual({ organizationId: "organization-b", leadIds: ["lead-b"] });
+  });
+
   it("builds a unique move label containing the lead contact name", () => {
     expect(getMoveLeadAriaLabel("Ana Souza", "lead-1")).toBe("Mover Ana Souza (lead-1) para outra etapa");
     expect(getMoveLeadAriaLabel("Ana Souza", "lead-2")).not.toBe(
@@ -187,6 +208,12 @@ describe("CRM client requests", () => {
 });
 
 describe("CRM view labels", () => {
+  it("uses UTF-8 Portuguese when CRM loading fails", async () => {
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse({ error: "Falha" }, 500));
+
+    await expect(loadCrmPipeline(fetcher)).rejects.toThrow("Não foi possível carregar o CRM.");
+  });
+
   it("shows organization selector only when context supplies admin-visible organizations", () => {
     expect(shouldShowOrganizationSelector([])).toBe(false);
     expect(shouldShowOrganizationSelector([{ id: "org-1", name: "Acme" }])).toBe(true);
