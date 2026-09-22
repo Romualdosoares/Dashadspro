@@ -23,3 +23,7 @@ export function getPlatformRole(user: RoleUser): PlatformRole {
 
   return "user";
 }
+
+export function isPlatformAdmin(user: RoleUser): boolean {
+  return getPlatformRole(user) === "admin";
+}

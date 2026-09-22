@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { isPlatformAdmin } from "@/lib/auth-role";
 import { NextResponse } from "next/server";
 
 /**
@@ -12,7 +13,7 @@ export async function requireAdmin() {
   if (!user) {
     return { user: null, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
-  if (user.app_metadata?.role !== "admin") {
+  if (!isPlatformAdmin(user)) {
     return { user: null, response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   }
   return { user, response: null };

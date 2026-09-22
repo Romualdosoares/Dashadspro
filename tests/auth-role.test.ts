@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getPlatformRole } from "../lib/auth-role";
+import { getPlatformRole, isPlatformAdmin } from "../lib/auth-role";
 
 describe("getPlatformRole", () => {
   it("uses admin role from app metadata even when user metadata differs", () => {
@@ -28,5 +28,9 @@ describe("getPlatformRole", () => {
     expect(
       getPlatformRole({ app_metadata: Object.create({ role: "admin" }) }),
     ).toBe("user");
+  });
+
+  it("does not authorize inherited app metadata roles", () => {
+    expect(isPlatformAdmin({ app_metadata: Object.create({ role: "admin" }) })).toBe(false);
   });
 });
