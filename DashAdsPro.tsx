@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useRealtime } from "@/hooks/useRealtime";
+import { getDashboardHeaderActions } from "@/lib/dashboard-header-actions";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, BarChart, Bar,
@@ -3359,6 +3360,7 @@ export default function DashAdsPro({ accountInfo }: { accountInfo?: AccountInfo 
 
   const userName = accountInfo?.userName?.trim() || "Admin";
   const initials = userName.split(" ").filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "U";
+  const headerActions = getDashboardHeaderActions(accountInfo?.role);
 
   const ov = insights?.overview;
   const cmp = insights?.comparison;
@@ -3559,19 +3561,27 @@ export default function DashAdsPro({ accountInfo }: { accountInfo?: AccountInfo 
               )}
 
               <div className="flex items-center gap-1">
-                {accountInfo?.role === "admin" && (
+                {headerActions.includes("admin") && (
                   <a href="/admin" title="Painel Admin"
                     className="p-2 sm:p-2.5 rounded-xl bg-[#0c0c0c] border border-[#39FF14]/20 text-[#39FF14] hover:bg-[#39FF14]/10 transition-all">
                     <Shield size={14} className="sm:w-4 sm:h-4" />
                   </a>
                 )}
+                {headerActions.includes("crm") && (
+                  <a href="/crm" title="CRM"
+                    className="p-2 sm:p-2.5 rounded-xl bg-[#0c0c0c] border border-[#39FF14]/20 text-[#39FF14] hover:bg-[#39FF14]/10 transition-all">
+                    <Columns3 size={14} className="sm:w-4 sm:h-4" />
+                  </a>
+                )}
                 <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-[#39FF14] to-[#1a8a0a] flex items-center justify-center text-black font-bold text-xs sm:text-sm shadow-lg shadow-[#39FF14]/20 shrink-0">
                   {initials}
                 </div>
-                <button onClick={handleLogout} disabled={loggingOut} title="Sair"
-                  className="p-2 sm:p-2.5 rounded-xl bg-[#0c0c0c] border border-[#1a1a1a] text-gray-600 hover:text-rose-400 hover:border-rose-500/30 transition-all disabled:opacity-50 cursor-pointer shrink-0">
-                  <LogOut size={14} className="sm:w-4 sm:h-4" />
-                </button>
+                {headerActions.includes("logout") && (
+                  <button onClick={handleLogout} disabled={loggingOut} title="Sair"
+                    className="p-2 sm:p-2.5 rounded-xl bg-[#0c0c0c] border border-[#1a1a1a] text-gray-600 hover:text-rose-400 hover:border-rose-500/30 transition-all disabled:opacity-50 cursor-pointer shrink-0">
+                    <LogOut size={14} className="sm:w-4 sm:h-4" />
+                  </button>
+                )}
               </div>
             </div>
           </div>

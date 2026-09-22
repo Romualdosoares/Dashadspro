@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { getPlatformRole } from "@/lib/auth-role";
 import { createClient } from "@/lib/supabase/server";
 import DashboardClient from "./DashboardClient";
 
@@ -26,7 +27,7 @@ export default async function DashboardPage() {
     adAccountName: meta.selected_ad_account_name ?? (isFacebook ? "" : "Demo Account"),
     userName: meta.full_name ?? meta.name ?? user.email ?? "Usuário",
     businessName: meta.selected_business_name ?? "",
-    role: (meta.role ?? "user") as "admin" | "user",
+    role: getPlatformRole(user),
     extraAccountIds: Array.isArray(meta.extra_account_ids) ? (meta.extra_account_ids as string[]) : [],
     extraAccountNames: Array.isArray(meta.extra_account_names) ? (meta.extra_account_names as string[]) : [],
   };
