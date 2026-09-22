@@ -95,16 +95,7 @@ export default function AdminShell({
       <div className="mx-auto grid max-w-[1600px] lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="border-b border-[#1A1E1A] bg-[#090A09] lg:min-h-[calc(100vh-4rem)] lg:border-b-0 lg:border-r">
           <nav aria-label="Administração" className="border-l-[3px] border-[#39FF14] p-3 lg:sticky lg:top-16 lg:p-4">
-            <div className="grid grid-cols-3 gap-1 lg:grid-cols-1">
-              {primaryLinks.map(({ href, label, icon: Icon }) => (
-                <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined} className={navClass(pathname === href)}>
-                  <Icon size={16} aria-hidden="true" />
-                  <span>{label}</span>
-                </Link>
-              ))}
-            </div>
-
-            <div className="mt-4 border-t border-[#202420] pt-4">
+            <div>
               <h2 className="px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6F776F]">Produtos e ajustes</h2>
               <div className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-1">
                 {productLinks.map(({ id, href, label, icon: Icon }, index) => {
@@ -117,6 +108,15 @@ export default function AdminShell({
                   );
                 })}
               </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-3 gap-1 border-t border-[#202420] pt-4 lg:grid-cols-1">
+              {primaryLinks.map(({ href, label, icon: Icon }) => (
+                <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined} className={navClass(pathname === href)}>
+                  <Icon size={16} aria-hidden="true" />
+                  <span>{label}</span>
+                </Link>
+              ))}
             </div>
           </nav>
         </aside>
