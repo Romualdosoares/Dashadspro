@@ -22,19 +22,27 @@ export async function GET(request: Request) {
     );
   }
 
-  const [businesses, personalAccounts] = await Promise.all([
-    fetchUserBusinesses(accessToken),
-    fetchUserAdAccounts(accessToken),
-  ]);
+  try {
+    const [businesses, personalAccounts] = await Promise.all([
+      fetchUserBusinesses(accessToken),
+      fetchUserAdAccounts(accessToken),
+    ]);
 
-  const businessAccountResults = await Promise.all(
-    businesses.map((b) => fetchBusinessAdAccounts(b.id, accessToken!))
-  );
+    const businessAccountResults = await Promise.all(
+      businesses.map((b) => fetchBusinessAdAccounts(b.id, accessToken))
+    );
 
-  const businessAccounts = businesses.map((business, i) => ({
-    business,
-    accounts: businessAccountResults[i],
-  }));
+    const businessAccounts = businesses.map((business, i) => ({
+      business,
+      accounts: businessAccountResults[i],
+    }));
 
-  return NextResponse.json({ personalAccounts, businessAccounts });
+    return NextResponse.json({ personalAccounts, businessAccounts });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha desconhecida";
+    return NextResponse.json(
+      { error: `Meta não conseguiu listar contas: ${message}` },
+      { status: 502 },
+    );
+  }
 }

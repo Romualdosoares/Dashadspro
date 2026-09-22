@@ -7,6 +7,9 @@ const {
   getFacebookToken,
   fetchAdAccountInsights,
   fetchAdInsights,
+  fetchUserBusinesses,
+  fetchUserAdAccounts,
+  fetchBusinessAdAccounts,
   getPreviousPeriod,
   parseDateSelection,
   fetchReportData,
@@ -22,6 +25,9 @@ const {
   getFacebookToken: vi.fn(),
   fetchAdAccountInsights: vi.fn(),
   fetchAdInsights: vi.fn(),
+  fetchUserBusinesses: vi.fn(),
+  fetchUserAdAccounts: vi.fn(),
+  fetchBusinessAdAccounts: vi.fn(),
   getPreviousPeriod: vi.fn(),
   parseDateSelection: vi.fn(),
   fetchReportData: vi.fn(),
@@ -43,6 +49,9 @@ vi.mock("@/lib/report-schedule", () => ({ normalizeBrazilianPhone }));
 vi.mock("@/lib/meta-api", () => ({
   fetchAdAccountInsights,
   fetchAdInsights,
+  fetchUserBusinesses,
+  fetchUserAdAccounts,
+  fetchBusinessAdAccounts,
   fetchAdAccountInsightsDaily: vi.fn(),
   fetchPlatformBreakdown: vi.fn(),
   fetchVideoRetention: vi.fn(),
@@ -51,6 +60,7 @@ vi.mock("@/lib/meta-api", () => ({
 
 import { GET as getCrmLeads } from "../app/api/crm/leads/route";
 import { GET as getMetaAds } from "../app/api/meta/ads/route";
+import { GET as getMetaBusinesses } from "../app/api/meta/businesses/route";
 import { GET as getMetaInsights } from "../app/api/meta/insights/route";
 import { GET as getReportConfig, POST as saveReportConfig } from "../app/api/reports/config/route";
 import { POST as sendWhatsAppReport } from "../app/api/reports/whatsapp/route";
@@ -114,6 +124,19 @@ describe("feature-gated product routes", () => {
 
     expect(response.status).toBe(200);
     expect(getFacebookToken).toHaveBeenCalledWith(user);
+  });
+
+  it("returns the Meta discovery error to reconnect the account", async () => {
+    const user = { id: "user-1" };
+    requireOrganizationFeature.mockResolvedValue({ ok: true, supabase: {}, user, organizationId });
+    getFacebookToken.mockResolvedValue({ token: "token" });
+    fetchUserBusinesses.mockResolvedValue([]);
+    fetchUserAdAccounts.mockRejectedValue(new Error("Session expired"));
+
+    const response = await getMetaBusinesses(new Request("http://localhost/api/meta/businesses"));
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: "Meta não conseguiu listar contas: Session expired" });
   });
 
   it("denies WhatsApp report sending before report work when dashboard access is absent", async () => {
