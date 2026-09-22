@@ -6,11 +6,17 @@ export type RoleUser = {
 };
 
 export function getPlatformRole(user: RoleUser): PlatformRole {
+  if (!Object.prototype.hasOwnProperty.call(user, "app_metadata")) {
+    return "user";
+  }
+
+  const appMetadata = user.app_metadata;
+
   if (
-    typeof user.app_metadata === "object" &&
-    user.app_metadata !== null &&
-    "role" in user.app_metadata &&
-    user.app_metadata.role === "admin"
+    typeof appMetadata === "object" &&
+    appMetadata !== null &&
+    Object.prototype.hasOwnProperty.call(appMetadata, "role") &&
+    (appMetadata as { role?: unknown }).role === "admin"
   ) {
     return "admin";
   }

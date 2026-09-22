@@ -19,4 +19,14 @@ describe("getPlatformRole", () => {
       }),
     ).toBe("user");
   });
+
+  it("does not grant admin from inherited metadata claims", () => {
+    expect(
+      getPlatformRole(Object.create({ app_metadata: { role: "admin" } })),
+    ).toBe("user");
+
+    expect(
+      getPlatformRole({ app_metadata: Object.create({ role: "admin" }) }),
+    ).toBe("user");
+  });
 });
