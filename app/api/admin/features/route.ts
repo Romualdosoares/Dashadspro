@@ -53,7 +53,7 @@ export async function PATCH(request: Request) {
     ? (body as Record<string, unknown>).status
     : undefined;
   if (status !== undefined && status !== "archived") {
-    return NextResponse.json({ error: "Status da funcionalidade invÃ¡lido" }, { status: 400 });
+    return NextResponse.json({ error: "Status da funcionalidade inválido" }, { status: 400 });
   }
 
   const values = status === "archived"

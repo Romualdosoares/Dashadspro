@@ -15,12 +15,12 @@ async function parseBody(request: Request): Promise<unknown | null> {
 
 function parseFeatureKeys(body: unknown): { ok: true; keys: FeatureKey[] } | { ok: false; error: string } {
   if (typeof body !== "object" || body === null || !Array.isArray((body as { featureKeys?: unknown }).featureKeys)) {
-    return { ok: false, error: "Feature keys invÃ¡lidos" };
+    return { ok: false, error: "Feature keys inválidos" };
   }
 
   const keys = (body as { featureKeys: unknown[] }).featureKeys;
   if (keys.some((key) => typeof key !== "string" || !FEATURE_KEYS.includes(key as FeatureKey))) {
-    return { ok: false, error: "Feature nÃ£o suportada" };
+    return { ok: false, error: "Feature não suportada" };
   }
   if (new Set(keys).size !== keys.length) {
     return { ok: false, error: "Feature keys duplicados" };
@@ -81,7 +81,7 @@ export async function PUT(
       .in("key", parsed.keys);
 
   if (catalogError || (catalogFeatures?.length ?? 0) !== parsed.keys.length) {
-    return NextResponse.json({ error: "Feature nÃ£o suportada" }, { status: 400 });
+    return NextResponse.json({ error: "Feature não suportada" }, { status: 400 });
   }
 
   const { error: deleteError } = await admin
