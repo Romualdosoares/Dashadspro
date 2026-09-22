@@ -1,4 +1,4 @@
-export const FEATURE_KEYS = ["dashboard_ads", "crm", "site_builder"] as const;
+export const FEATURE_KEYS = Object.freeze(["dashboard_ads", "crm", "site_builder"] as const);
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 

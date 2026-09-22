@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getFeatureDefinition, parseCatalogFeatureInput } from "../lib/feature-catalog";
+import { FEATURE_KEYS, getFeatureDefinition, parseCatalogFeatureInput } from "../lib/feature-catalog";
 
 describe("parseCatalogFeatureInput", () => {
   it("accepts an allowlisted catalog feature", () => {
@@ -14,6 +14,20 @@ describe("parseCatalogFeatureInput", () => {
   });
 
   it("rejects an unsupported feature key", () => {
+    expect(
+      parseCatalogFeatureInput({
+        key: "unsafe",
+        name: "Unsafe",
+        description: "Unsafe feature",
+        position: 0,
+      }),
+    ).toEqual({ ok: false, error: "Feature não suportada" });
+  });
+
+  it("keeps the allowlist immutable at runtime", () => {
+    const mutableKeys = FEATURE_KEYS as unknown as string[];
+
+    expect(() => mutableKeys.push("unsafe")).toThrow();
     expect(
       parseCatalogFeatureInput({
         key: "unsafe",
