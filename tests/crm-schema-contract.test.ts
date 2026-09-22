@@ -3,9 +3,14 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const migrationPath = resolve(process.cwd(), "supabase-crm-phase-1.sql");
+const featureAccessMigrationPath = resolve(process.cwd(), "supabase-feature-access.sql");
 
 function readMigration() {
   return readFileSync(migrationPath, "utf8");
+}
+
+function readFeatureAccessMigration() {
+  return readFileSync(featureAccessMigrationPath, "utf8");
 }
 
 describe("CRM Phase 1 schema migration", () => {
@@ -128,5 +133,23 @@ describe("CRM Phase 1 schema migration", () => {
     expect(createLeadBody!.indexOf("pg_advisory_xact_lock")).toBeLessThan(
       createLeadBody!.indexOf("FOR UPDATE"),
     );
+  });
+});
+
+describe("organization feature access schema migration", () => {
+  it("defines catalog and organization access contracts", () => {
+    const sql = readFeatureAccessMigration();
+
+    for (const requiredSql of [
+      "CREATE TABLE IF NOT EXISTS public.product_features",
+      "CREATE TABLE IF NOT EXISTS public.organization_feature_accesses",
+      "UNIQUE (organization_id, feature_id)",
+      "product_features_admin_write",
+      "organization_feature_accesses_member_read",
+      "dashboard_ads",
+      "site_builder",
+    ]) {
+      expect(sql).toContain(requiredSql);
+    }
   });
 });
