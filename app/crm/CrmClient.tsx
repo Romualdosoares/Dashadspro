@@ -108,14 +108,14 @@ export default function CrmClient({
     }
   }
 
-  async function moveLead(leadId: string, stageId: string) {
+  async function moveLead(leadId: string, stageId: string, updatedAt: string) {
     setError(null);
     setMovingLeadIds((currentLeadIds) => addMovingLead(currentLeadIds, leadId));
 
     try {
-      await requestLeadMove(fetch, leadId, stageId, (updatedLeadId, updatedStageId) => {
+      await requestLeadMove(fetch, leadId, stageId, updatedAt, (updatedLeadId, updatedStageId, updatedAt) => {
         setLeads((currentLeads) => currentLeads.map((lead) => (
-          lead.id === updatedLeadId ? { ...lead, stage_id: updatedStageId } : lead
+          lead.id === updatedLeadId ? { ...lead, stage_id: updatedStageId, updated_at: updatedAt } : lead
         )));
       }, selectedOrganizationId);
     } catch (moveError) {
@@ -278,7 +278,7 @@ export default function CrmClient({
                           value={lead.stage_id}
                           aria-label={getMoveLeadAriaLabel(lead.contact_name, lead.id)}
                           disabled={loading || movingLeadIds.has(lead.id)}
-                          onChange={(event) => void moveLead(lead.id, event.target.value)}
+                          onChange={(event) => void moveLead(lead.id, event.target.value, lead.updated_at)}
                           className="border border-[#2A2F2A] bg-[#10120F] px-2 py-2 text-xs text-white outline-none focus:border-[#00E676] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {stages.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}

@@ -34,6 +34,7 @@ const lead = {
   contact_phone: null,
   contact_email: "ana@example.com",
   created_at: "2026-09-21T10:00:00.000Z",
+  updated_at: "2026-09-21T10:00:00.000Z",
 };
 
 describe("CRM page auth state", () => {
@@ -114,36 +115,36 @@ describe("CRM client requests", () => {
     });
   });
 
-  it("sends only stage_id and applies server-authoritative move state only after success", async () => {
+  it("sends stage and snapshot timestamp, then applies server-authoritative move state only after success", async () => {
     const applyMove = vi.fn();
     const fetcher = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ error: "Stage not found" }, 404))
-      .mockResolvedValueOnce(jsonResponse({ lead: { id: "lead-1", stage_id: "stage-server" } }));
+      .mockResolvedValueOnce(jsonResponse({ lead: { id: "lead-1", stage_id: "stage-server", updated_at: "2026-09-22T12:00:01.000Z" } }));
 
-    await expect(requestLeadMove(fetcher, "lead-1", "stage-won", applyMove)).rejects.toThrow("Stage not found");
+    await expect(requestLeadMove(fetcher, "lead-1", "stage-won", lead.updated_at, applyMove)).rejects.toThrow("Stage not found");
     expect(applyMove).not.toHaveBeenCalled();
 
-    await requestLeadMove(fetcher, "lead-1", "stage-won", applyMove);
+    await requestLeadMove(fetcher, "lead-1", "stage-won", lead.updated_at, applyMove);
     expect(fetcher).toHaveBeenLastCalledWith("/api/crm/leads/lead-1", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stage_id: "stage-won" }),
+      body: JSON.stringify({ stage_id: "stage-won", updated_at: lead.updated_at }),
     });
     expect(applyMove).toHaveBeenCalledOnce();
-    expect(applyMove).toHaveBeenCalledWith("lead-1", "stage-server");
+    expect(applyMove).toHaveBeenCalledWith("lead-1", "stage-server", "2026-09-22T12:00:01.000Z");
   });
 
   it("sends selected organization in move URL, never patch body", async () => {
     const organizationId = "550e8400-e29b-41d4-a716-446655440000";
     const applyMove = vi.fn();
-    const fetcher = vi.fn().mockResolvedValue(jsonResponse({ lead: { id: "lead-1", stage_id: "stage-server" } }));
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse({ lead: { id: "lead-1", stage_id: "stage-server", updated_at: "2026-09-22T12:00:01.000Z" } }));
 
-    await requestLeadMove(fetcher, "lead-1", "stage-won", applyMove, organizationId);
+    await requestLeadMove(fetcher, "lead-1", "stage-won", lead.updated_at, applyMove, organizationId);
 
     expect(fetcher).toHaveBeenCalledWith(`/api/crm/leads/lead-1?organization_id=${organizationId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stage_id: "stage-won" }),
+      body: JSON.stringify({ stage_id: "stage-won", updated_at: lead.updated_at }),
     });
   });
 

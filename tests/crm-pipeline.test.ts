@@ -19,6 +19,7 @@ describe("buildPipelineColumns", () => {
           contact_phone: null,
           contact_email: "ana@example.com",
           created_at: "2026-09-21T10:00:00.000Z",
+          updated_at: "2026-09-21T10:00:00.000Z",
         },
         {
           id: "lead-2",
@@ -30,6 +31,7 @@ describe("buildPipelineColumns", () => {
           contact_phone: "5511999999999",
           contact_email: null,
           created_at: "2026-09-21T11:00:00.000Z",
+          updated_at: "2026-09-21T11:00:00.000Z",
         },
       ],
     );

@@ -303,6 +303,102 @@ $$;
 REVOKE ALL ON FUNCTION public.can_access_organization(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.can_access_organization(uuid) TO authenticated, service_role;
 
+CREATE OR REPLACE FUNCTION public.create_crm_lead(
+  target_organization_id uuid,
+  contact_name text,
+  contact_phone text,
+  contact_email text,
+  lead_source text
+)
+RETURNS TABLE (lead_id uuid, contact_id uuid, stage_id uuid)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  normalized_phone text := NULLIF(btrim(contact_phone), '');
+  normalized_email text := NULLIF(lower(btrim(contact_email)), '');
+  matched_phone_contact_id uuid;
+  matched_email_contact_id uuid;
+  resolved_contact_id uuid;
+  initial_stage_id uuid;
+  created_lead_id uuid;
+BEGIN
+  IF NOT public.can_access_organization(target_organization_id) THEN
+    RAISE EXCEPTION 'Organization access denied' USING ERRCODE = '42501';
+  END IF;
+
+  IF lead_source IS NULL OR lead_source NOT IN ('manual', 'landing_page', 'whatsapp') THEN
+    RAISE EXCEPTION 'Invalid lead source' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT id
+    INTO initial_stage_id
+    FROM public.crm_pipeline_stages
+    WHERE organization_id = target_organization_id
+    ORDER BY position ASC
+    LIMIT 1;
+  IF initial_stage_id IS NULL THEN
+    RAISE EXCEPTION 'Pipeline stage required' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF normalized_phone IS NOT NULL THEN
+    SELECT id
+      INTO matched_phone_contact_id
+      FROM public.crm_contacts
+      WHERE organization_id = target_organization_id
+        AND phone = normalized_phone
+      LIMIT 1
+      FOR UPDATE;
+  END IF;
+  IF normalized_email IS NOT NULL THEN
+    SELECT id
+      INTO matched_email_contact_id
+      FROM public.crm_contacts
+      WHERE organization_id = target_organization_id
+        AND lower(email) = normalized_email
+      LIMIT 1
+      FOR UPDATE;
+  END IF;
+
+  IF matched_phone_contact_id IS NOT NULL
+    AND matched_email_contact_id IS NOT NULL
+    AND matched_phone_contact_id <> matched_email_contact_id THEN
+    RAISE EXCEPTION 'Contact identities conflict' USING ERRCODE = '23505';
+  END IF;
+
+  resolved_contact_id := COALESCE(matched_phone_contact_id, matched_email_contact_id);
+  IF resolved_contact_id IS NULL THEN
+    INSERT INTO public.crm_contacts (organization_id, name, phone, email)
+    VALUES (target_organization_id, btrim(contact_name), normalized_phone, normalized_email)
+    RETURNING id INTO resolved_contact_id;
+  ELSE
+    UPDATE public.crm_contacts AS contact
+    SET
+      name = CASE WHEN btrim(contact.name) = '' THEN btrim(contact_name) ELSE contact.name END,
+      phone = COALESCE(contact.phone, normalized_phone),
+      email = COALESCE(contact.email, normalized_email),
+      updated_at = now()
+    WHERE contact.id = resolved_contact_id
+      AND contact.organization_id = target_organization_id
+      AND (
+        btrim(contact.name) = ''
+        OR (contact.phone IS NULL AND normalized_phone IS NOT NULL)
+        OR (contact.email IS NULL AND normalized_email IS NOT NULL)
+      );
+  END IF;
+
+  INSERT INTO public.crm_leads (organization_id, contact_id, stage_id, source)
+  VALUES (target_organization_id, resolved_contact_id, initial_stage_id, lead_source)
+  RETURNING id INTO created_lead_id;
+
+  RETURN QUERY SELECT created_lead_id, resolved_contact_id, initial_stage_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.create_crm_lead(uuid, text, text, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.create_crm_lead(uuid, text, text, text, text) TO authenticated, service_role;
+
 ALTER TABLE public.facebook_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ad_accounts ENABLE ROW LEVEL SECURITY;
 

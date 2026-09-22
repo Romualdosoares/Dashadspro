@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireActiveOrganization } from "../../../../../lib/organization-access";
-import { validateLeadStageUpdate } from "../../../../../lib/crm-validation";
+import { validateLeadStageUpdate, validateLeadUpdatedAt } from "../../../../../lib/crm-validation";
 
 type RouteContext = { params: Promise<{ leadId: string }> };
 
@@ -30,6 +30,12 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     if (!stageValidation.ok) {
       return NextResponse.json({ error: stageValidation.error }, { status: 400 });
     }
+    const updatedAtValidation = validateLeadUpdatedAt(
+      body && typeof body === "object" ? (body as { updated_at?: unknown }).updated_at : undefined,
+    );
+    if (!updatedAtValidation.ok) {
+      return NextResponse.json({ error: updatedAtValidation.error }, { status: 400 });
+    }
 
     const { data: stage, error: stageError } = await supabase
       .from("crm_pipeline_stages")
@@ -46,16 +52,29 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     const { data: lead, error: updateError } = await supabase
       .from("crm_leads")
-      .update({ stage_id: stageValidation.value })
+      .update({ stage_id: stageValidation.value, updated_at: new Date().toISOString() })
       .eq("id", leadId)
       .eq("organization_id", organizationId)
-      .select("id, stage_id")
+      .eq("updated_at", updatedAtValidation.value)
+      .select("id, stage_id, updated_at")
       .maybeSingle();
     if (updateError) {
       return NextResponse.json({ error: "Could not update CRM lead" }, { status: 500 });
     }
     if (!lead) {
-      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+      const { data: existingLead, error: existingLeadError } = await supabase
+        .from("crm_leads")
+        .select("id")
+        .eq("id", leadId)
+        .eq("organization_id", organizationId)
+        .maybeSingle();
+      if (existingLeadError) {
+        return NextResponse.json({ error: "Could not update CRM lead" }, { status: 500 });
+      }
+      if (!existingLead) {
+        return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+      }
+      return NextResponse.json({ error: "Lead changed; reload and try again" }, { status: 409 });
     }
 
     return NextResponse.json({ lead });

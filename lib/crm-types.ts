@@ -18,4 +18,5 @@ export interface CrmLead {
   contact_phone: string | null;
   contact_email: string | null;
   created_at: string;
+  updated_at: string;
 }

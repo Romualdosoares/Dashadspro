@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateLeadCreate, validateLeadStageUpdate } from "../lib/crm-validation";
+import { validateLeadCreate, validateLeadStageUpdate, validateLeadUpdatedAt } from "../lib/crm-validation";
 
 describe("validateLeadCreate", () => {
   it("rejects null input without throwing", () => {
@@ -36,6 +36,24 @@ describe("validateLeadCreate", () => {
         phone: "5511988887777",
         email: null,
         source: "whatsapp",
+      },
+    });
+  });
+
+  it("normalizes email whitespace and casing before contact lookup", () => {
+    expect(
+      validateLeadCreate({
+        name: "Maria Silva",
+        source: "manual",
+        email: "  Maria.Silva@Example.COM ",
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        name: "Maria Silva",
+        phone: null,
+        email: "maria.silva@example.com",
+        source: "manual",
       },
     });
   });
@@ -89,6 +107,17 @@ describe("validateLeadStageUpdate", () => {
     expect(validateLeadStageUpdate("550e8400-e29b-41d4-a716-446655440000")).toEqual({
       ok: true,
       value: "550e8400-e29b-41d4-a716-446655440000",
+    });
+  });
+});
+
+describe("validateLeadUpdatedAt", () => {
+  it("requires a valid client snapshot timestamp", () => {
+    expect(validateLeadUpdatedAt(undefined).ok).toBe(false);
+    expect(validateLeadUpdatedAt("not-a-date").ok).toBe(false);
+    expect(validateLeadUpdatedAt("2026-09-22T12:00:00.000Z")).toEqual({
+      ok: true,
+      value: "2026-09-22T12:00:00.000Z",
     });
   });
 });

@@ -9,7 +9,7 @@ export type LeadForm = {
   source: LeadSource;
 };
 
-type UpdatedLeadResponse = Pick<CrmLead, "id" | "stage_id">;
+type UpdatedLeadResponse = Pick<CrmLead, "id" | "stage_id" | "updated_at">;
 
 export type CrmOrganizationOption = { id: string; name: string };
 
@@ -116,13 +116,14 @@ export async function requestLeadMove(
   fetcher: CrmFetcher,
   leadId: string,
   stageId: string,
-  applyMove: (leadId: string, stageId: string) => void,
+  updatedAt: string,
+  applyMove: (leadId: string, stageId: string, updatedAt: string) => void,
   organizationId?: string,
 ): Promise<void> {
   const response = await fetcher(organizationUrl(`/api/crm/leads/${leadId}`, organizationId), {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ stage_id: stageId }),
+    body: JSON.stringify({ stage_id: stageId, updated_at: updatedAt }),
   });
   const data = await response.json().catch(() => null) as { lead?: UpdatedLeadResponse; error?: string } | null;
 
@@ -130,7 +131,7 @@ export async function requestLeadMove(
     throw new Error(data?.error ?? "Não foi possível mover o lead.");
   }
 
-  applyMove(data.lead.id, data.lead.stage_id);
+  applyMove(data.lead.id, data.lead.stage_id, data.lead.updated_at);
 }
 
 export function getCrmPipelineViewLabels({
