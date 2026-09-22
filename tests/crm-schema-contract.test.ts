@@ -37,7 +37,11 @@ describe("CRM Phase 1 schema migration", () => {
     expect(sql).toMatch(/source\s+text\s+not null\s+check\s*\(source in \('manual', 'landing_page', 'whatsapp'\)\)/i);
     expect(sql).toMatch(/status\s+text\s+not null\s+default 'open'\s+check\s*\(status in \('open', 'won', 'lost'\)\)/i);
     expect(sql).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS crm_contacts_organization_phone_unique[\s\S]*WHERE phone IS NOT NULL/i);
-    expect(sql).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS crm_contacts_organization_email_unique[\s\S]*WHERE email IS NOT NULL/i);
+    expect(sql).toMatch(/DROP INDEX IF EXISTS public\.crm_contacts_organization_email_unique/i);
+    expect(sql).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS crm_contacts_organization_email_unique[\s\S]*ON public\.crm_contacts \(organization_id, lower\(email\)\) WHERE email IS NOT NULL/i);
+    expect(sql).toMatch(/UPDATE public\.crm_contacts\s+SET email = lower\(email\)\s+WHERE email IS NOT NULL/i);
+    expect(sql).toMatch(/UPDATE public\.crm_leads AS lead[\s\S]*SET contact_id = duplicates\.canonical_contact_id/i);
+    expect(sql).toMatch(/DELETE FROM public\.crm_contacts AS duplicate[\s\S]*USING duplicate_contacts AS duplicates/i);
   });
 
   it("bootstraps personal organizations and default pipeline stages", () => {

@@ -89,8 +89,62 @@ CREATE INDEX IF NOT EXISTS crm_deals_organization_status_created_idx
   ON public.crm_deals (organization_id, status, created_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS crm_contacts_organization_phone_unique
   ON public.crm_contacts (organization_id, phone) WHERE phone IS NOT NULL;
+
+-- Replace exact-email uniqueness with case-insensitive uniqueness. Drop first so
+-- normalizing legacy case variants cannot violate the old exact-match index.
+DROP INDEX IF EXISTS public.crm_contacts_organization_email_unique;
+
+UPDATE public.crm_contacts
+SET email = lower(email)
+WHERE email IS NOT NULL;
+
+WITH ranked_contacts AS (
+  SELECT
+    id AS duplicate_contact_id,
+    organization_id,
+    first_value(id) OVER (
+      PARTITION BY organization_id, email
+      ORDER BY created_at ASC, id ASC
+    ) AS canonical_contact_id,
+    row_number() OVER (
+      PARTITION BY organization_id, email
+      ORDER BY created_at ASC, id ASC
+    ) AS email_rank
+  FROM public.crm_contacts
+  WHERE email IS NOT NULL
+), duplicate_contacts AS (
+  SELECT duplicate_contact_id, organization_id, canonical_contact_id
+  FROM ranked_contacts
+  WHERE email_rank > 1
+)
+UPDATE public.crm_leads AS lead
+SET contact_id = duplicates.canonical_contact_id
+FROM duplicate_contacts AS duplicates
+WHERE lead.contact_id = duplicates.duplicate_contact_id
+  AND lead.organization_id = duplicates.organization_id;
+
+WITH ranked_contacts AS (
+  SELECT
+    id AS duplicate_contact_id,
+    organization_id,
+    row_number() OVER (
+      PARTITION BY organization_id, email
+      ORDER BY created_at ASC, id ASC
+    ) AS email_rank
+  FROM public.crm_contacts
+  WHERE email IS NOT NULL
+), duplicate_contacts AS (
+  SELECT duplicate_contact_id, organization_id
+  FROM ranked_contacts
+  WHERE email_rank > 1
+)
+DELETE FROM public.crm_contacts AS duplicate
+USING duplicate_contacts AS duplicates
+WHERE duplicate.id = duplicates.duplicate_contact_id
+  AND duplicate.organization_id = duplicates.organization_id;
+
 CREATE UNIQUE INDEX IF NOT EXISTS crm_contacts_organization_email_unique
-  ON public.crm_contacts (organization_id, email) WHERE email IS NOT NULL;
+  ON public.crm_contacts (organization_id, lower(email)) WHERE email IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION public.create_default_pipeline_stages()
 RETURNS trigger
