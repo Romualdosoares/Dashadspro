@@ -11,6 +11,8 @@ export type LeadForm = {
 
 type UpdatedLeadResponse = Pick<CrmLead, "id" | "stage_id">;
 
+export type CrmOrganizationOption = { id: string; name: string };
+
 export const emptyLeadForm: LeadForm = {
   name: "",
   phone: "",
@@ -53,15 +55,29 @@ export function getMoveLeadAriaLabel(contactName: string, leadId: string): strin
   return `Mover ${contactName || "contato sem nome"} (${leadId}) para outra etapa`;
 }
 
-export async function loadCrmPipeline(fetcher: CrmFetcher): Promise<{
+export function shouldShowOrganizationSelector(organizations: CrmOrganizationOption[]): boolean {
+  return organizations.length > 0;
+}
+
+function organizationUrl(path: string, organizationId?: string): string {
+  return organizationId ? `${path}?organization_id=${encodeURIComponent(organizationId)}` : path;
+}
+
+export async function loadCrmPipeline(fetcher: CrmFetcher, organizationId?: string): Promise<{
   stages: CrmStage[];
   leads: CrmLead[];
+  organizations: CrmOrganizationOption[];
+  organizationId: string | null;
 }> {
   const [contextResponse, leadsResponse] = await Promise.all([
-    fetcher("/api/crm/context"),
-    fetcher("/api/crm/leads"),
+    fetcher(organizationUrl("/api/crm/context", organizationId)),
+    fetcher(organizationUrl("/api/crm/leads", organizationId)),
   ]);
-  const context = await contextResponse.json().catch(() => null) as { stages?: CrmStage[] } | null;
+  const context = await contextResponse.json().catch(() => null) as {
+    stages?: CrmStage[];
+    organizations?: CrmOrganizationOption[];
+    organization?: { id?: unknown };
+  } | null;
   const leadData = await leadsResponse.json().catch(() => null) as { leads?: CrmLead[] } | null;
 
   if (!contextResponse.ok || !leadsResponse.ok || !context || !leadData) {
@@ -71,6 +87,8 @@ export async function loadCrmPipeline(fetcher: CrmFetcher): Promise<{
   return {
     stages: Array.isArray(context.stages) ? context.stages : [],
     leads: Array.isArray(leadData.leads) ? leadData.leads : [],
+    organizations: Array.isArray(context.organizations) ? context.organizations : [],
+    organizationId: typeof context.organization?.id === "string" ? context.organization.id : null,
   };
 }
 
@@ -78,8 +96,9 @@ export async function submitCrmLead(
   fetcher: CrmFetcher,
   form: LeadForm,
   reloadCanonicalPipeline: (resetForm: LeadForm) => void | Promise<void>,
+  organizationId?: string,
 ): Promise<void> {
-  const response = await fetcher("/api/crm/leads", {
+  const response = await fetcher(organizationUrl("/api/crm/leads", organizationId), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(form),
@@ -98,8 +117,9 @@ export async function requestLeadMove(
   leadId: string,
   stageId: string,
   applyMove: (leadId: string, stageId: string) => void,
+  organizationId?: string,
 ): Promise<void> {
-  const response = await fetcher(`/api/crm/leads/${leadId}`, {
+  const response = await fetcher(organizationUrl(`/api/crm/leads/${leadId}`, organizationId), {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ stage_id: stageId }),

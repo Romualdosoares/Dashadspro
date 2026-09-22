@@ -136,4 +136,71 @@ describe("requireActiveOrganization", () => {
       "Could not load organization memberships: database unavailable",
     );
   });
+
+  it("allows a platform admin to select an RLS-visible organization", async () => {
+    const requestedOrganizationId = "550e8400-e29b-41d4-a716-446655440000";
+    const membershipOrder = vi.fn().mockResolvedValue({ data: [], error: null });
+    const organization = {
+      select: vi.fn(() => organization),
+      eq: vi.fn(() => organization),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { id: requestedOrganizationId }, error: null }),
+    };
+    const supabase = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "admin-1", app_metadata: { role: "admin" } } },
+        }),
+      },
+      from: vi.fn((table: string) => table === "organizations"
+        ? organization
+        : { select: vi.fn(() => ({ eq: vi.fn(() => ({ order: membershipOrder })) })) }),
+    };
+    createClient.mockResolvedValue(supabase);
+
+    await expect(requireActiveOrganization(requestedOrganizationId)).resolves.toMatchObject({
+      user: { id: "admin-1" },
+      organizationId: requestedOrganizationId,
+    });
+    expect(supabase.from).toHaveBeenCalledWith("organizations");
+    expect(organization.eq).toHaveBeenCalledWith("id", requestedOrganizationId);
+  });
+
+  it("does not let a non-admin request another organization", async () => {
+    const membershipOrder = vi.fn().mockResolvedValue({
+      data: [{ organization_id: "member-org", role: "agent" }],
+      error: null,
+    });
+    const from = vi.fn(() => ({
+      select: vi.fn(() => ({ eq: vi.fn(() => ({ order: membershipOrder })) })),
+    }));
+    const supabase = {
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: "user-1" } } }) },
+      from,
+    };
+    createClient.mockResolvedValue(supabase);
+
+    await expect(requireActiveOrganization("550e8400-e29b-41d4-a716-446655440000")).resolves.toMatchObject({
+      organizationId: "member-org",
+    });
+    expect(from).not.toHaveBeenCalledWith("organizations");
+  });
+
+  it("rejects an invalid platform-admin organization ID without lookup", async () => {
+    const membershipOrder = vi.fn().mockResolvedValue({ data: [], error: null });
+    const from = vi.fn(() => ({
+      select: vi.fn(() => ({ eq: vi.fn(() => ({ order: membershipOrder })) })),
+    }));
+    const supabase = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "admin-1", app_metadata: { role: "admin" } } },
+        }),
+      },
+      from,
+    };
+    createClient.mockResolvedValue(supabase);
+
+    await expect(requireActiveOrganization("not-a-uuid")).resolves.toMatchObject({ organizationId: null });
+    expect(from).not.toHaveBeenCalledWith("organizations");
+  });
 });

@@ -11,7 +11,9 @@ import {
   loadCrmPipeline,
   removeMovingLead,
   requestLeadMove,
+  shouldShowOrganizationSelector,
   submitCrmLead,
+  type CrmOrganizationOption,
 } from "@/lib/crm-client-state";
 import { buildPipelineColumns } from "@/lib/crm-pipeline";
 import type { CrmLead, CrmStage, LeadSource } from "@/lib/crm-types";
@@ -31,6 +33,8 @@ export default function CrmClient({
 }) {
   const [stages, setStages] = useState<CrmStage[]>([]);
   const [leads, setLeads] = useState<CrmLead[]>([]);
+  const [organizations, setOrganizations] = useState<CrmOrganizationOption[]>([]);
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -47,10 +51,14 @@ export default function CrmClient({
     setError(null);
 
     try {
-      const pipeline = await loadCrmPipeline(fetch);
+      const pipeline = await loadCrmPipeline(fetch, selectedOrganizationId);
       if (!pipelineRequests.current.isCurrent(requestGeneration)) return;
       setStages(pipeline.stages);
       setLeads(pipeline.leads);
+      setOrganizations(pipeline.organizations);
+      if (pipeline.organizations.length > 0 && pipeline.organizationId) {
+        setSelectedOrganizationId((currentOrganizationId) => currentOrganizationId ?? pipeline.organizationId ?? undefined);
+      }
     } catch (loadError) {
       if (!pipelineRequests.current.isCurrent(requestGeneration)) return;
       setError(loadError instanceof Error ? loadError.message : "Não foi possível carregar o CRM.");
@@ -59,7 +67,7 @@ export default function CrmClient({
         setLoading(false);
       }
     }
-  }, []);
+  }, [selectedOrganizationId]);
 
   useEffect(() => {
     void loadPipeline();
@@ -91,6 +99,7 @@ export default function CrmClient({
           setSource(resetForm.source);
           await loadPipeline();
         },
+        selectedOrganizationId,
       );
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Não foi possível criar o lead.");
@@ -108,7 +117,7 @@ export default function CrmClient({
         setLeads((currentLeads) => currentLeads.map((lead) => (
           lead.id === updatedLeadId ? { ...lead, stage_id: updatedStageId } : lead
         )));
-      });
+      }, selectedOrganizationId);
     } catch (moveError) {
       setError(moveError instanceof Error ? moveError.message : "Não foi possível mover o lead.");
     } finally {
@@ -125,6 +134,22 @@ export default function CrmClient({
             <h1 className="mt-1 text-xl font-semibold tracking-tight text-white sm:text-2xl">Pipeline de leads</h1>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-xs text-[#AAB2AA]">
+            {shouldShowOrganizationSelector(organizations) ? (
+              <label className="grid gap-1 text-xs text-[#AAB2AA]">
+                Organização ativa
+                <select
+                  value={selectedOrganizationId ?? ""}
+                  onChange={(event) => setSelectedOrganizationId(event.target.value || undefined)}
+                  disabled={loading}
+                  className="border border-[#2A2F2A] bg-[#0B0C0A] px-2 py-2 text-xs text-white outline-none focus:border-[#00E676] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="" disabled>Selecione organização</option>
+                  {organizations.map((organization) => (
+                    <option key={organization.id} value={organization.id}>{organization.name}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <span>{userName}</span>
             {userEmail ? <span className="border-l border-[#2A2F2A] pl-3">{userEmail}</span> : null}
             <a
@@ -252,7 +277,7 @@ export default function CrmClient({
                         <select
                           value={lead.stage_id}
                           aria-label={getMoveLeadAriaLabel(lead.contact_name, lead.id)}
-                          disabled={movingLeadIds.has(lead.id)}
+                          disabled={loading || movingLeadIds.has(lead.id)}
                           onChange={(event) => void moveLead(lead.id, event.target.value)}
                           className="border border-[#2A2F2A] bg-[#10120F] px-2 py-2 text-xs text-white outline-none focus:border-[#00E676] disabled:cursor-not-allowed disabled:opacity-50"
                         >

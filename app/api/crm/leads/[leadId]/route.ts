@@ -6,7 +6,8 @@ type RouteContext = { params: Promise<{ leadId: string }> };
 
 export async function PATCH(request: Request, { params }: RouteContext) {
   try {
-    const { supabase, user, organizationId } = await requireActiveOrganization();
+    const requestedOrganizationId = new URL(request.url).searchParams.get("organization_id");
+    const { supabase, user, organizationId } = await requireActiveOrganization(requestedOrganizationId);
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

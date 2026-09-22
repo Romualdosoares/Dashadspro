@@ -11,6 +11,7 @@ import {
   loadCrmPipeline,
   removeMovingLead,
   requestLeadMove,
+  shouldShowOrganizationSelector,
   submitCrmLead,
 } from "../lib/crm-client-state";
 import { getDashboardHeaderActions } from "../lib/dashboard-header-actions";
@@ -55,9 +56,21 @@ describe("CRM client requests", () => {
       .mockResolvedValueOnce(jsonResponse({ organization_id: "org-1", stages }))
       .mockResolvedValueOnce(jsonResponse({ leads: [lead] }));
 
-    await expect(loadCrmPipeline(fetcher)).resolves.toEqual({ stages, leads: [lead] });
+    await expect(loadCrmPipeline(fetcher)).resolves.toEqual({ stages, leads: [lead], organizations: [], organizationId: null });
     expect(fetcher).toHaveBeenNthCalledWith(1, "/api/crm/context");
     expect(fetcher).toHaveBeenNthCalledWith(2, "/api/crm/leads");
+  });
+
+  it("applies selected organization only in CRM endpoint URLs", async () => {
+    const organizationId = "550e8400-e29b-41d4-a716-446655440000";
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ stages }))
+      .mockResolvedValueOnce(jsonResponse({ leads: [lead] }));
+
+    await loadCrmPipeline(fetcher, organizationId);
+
+    expect(fetcher).toHaveBeenNthCalledWith(1, `/api/crm/context?organization_id=${organizationId}`);
+    expect(fetcher).toHaveBeenNthCalledWith(2, `/api/crm/leads?organization_id=${organizationId}`);
   });
 
   it("resets form then reloads canonical leads after creation without synthesizing a lead", async () => {
@@ -87,6 +100,20 @@ describe("CRM client requests", () => {
     });
   });
 
+  it("sends selected organization in lead URL, never request body", async () => {
+    const organizationId = "550e8400-e29b-41d4-a716-446655440000";
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse({ lead: { id: "lead-2", contact_id: "contact-2", stage_id: "stage-new" } }));
+    const form = { name: "Bruno Lima", phone: "(11) 99999-0000", email: "", source: "whatsapp" as const };
+
+    await submitCrmLead(fetcher, form, () => undefined, organizationId);
+
+    expect(fetcher).toHaveBeenCalledWith(`/api/crm/leads?organization_id=${organizationId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    });
+  });
+
   it("sends only stage_id and applies server-authoritative move state only after success", async () => {
     const applyMove = vi.fn();
     const fetcher = vi.fn()
@@ -104,6 +131,20 @@ describe("CRM client requests", () => {
     });
     expect(applyMove).toHaveBeenCalledOnce();
     expect(applyMove).toHaveBeenCalledWith("lead-1", "stage-server");
+  });
+
+  it("sends selected organization in move URL, never patch body", async () => {
+    const organizationId = "550e8400-e29b-41d4-a716-446655440000";
+    const applyMove = vi.fn();
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse({ lead: { id: "lead-1", stage_id: "stage-server" } }));
+
+    await requestLeadMove(fetcher, "lead-1", "stage-won", applyMove, organizationId);
+
+    expect(fetcher).toHaveBeenCalledWith(`/api/crm/leads/lead-1?organization_id=${organizationId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage_id: "stage-won" }),
+    });
   });
 
   it("keeps each move disabled until its own request settles", () => {
@@ -145,6 +186,11 @@ describe("CRM client requests", () => {
 });
 
 describe("CRM view labels", () => {
+  it("shows organization selector only when context supplies admin-visible organizations", () => {
+    expect(shouldShowOrganizationSelector([])).toBe(false);
+    expect(shouldShowOrganizationSelector([{ id: "org-1", name: "Acme" }])).toBe(true);
+  });
+
   it("exposes loading, error, and empty labels for rendering", () => {
     expect(getCrmPipelineViewLabels({ loading: true, error: null, columnCount: 0 })).toEqual({
       loading: "Carregando pipeline...",

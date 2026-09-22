@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getPlatformRole } from "./auth-role";
 import type { OrganizationRole } from "./crm-types";
 
 type OrganizationMembership = {
@@ -23,7 +24,9 @@ export function pickActiveOrganization(
   return null;
 }
 
-export async function requireActiveOrganization() {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export async function requireActiveOrganization(requestedOrganizationId?: string | null) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -50,9 +53,35 @@ export async function requireActiveOrganization() {
     throw new Error(`Could not load organization memberships: ${error.message}`);
   }
 
+  const fallbackOrganizationId = pickActiveOrganization(memberships ?? []);
+  if (getPlatformRole(user) !== "admin" || requestedOrganizationId == null) {
+    return {
+      supabase,
+      user,
+      organizationId: fallbackOrganizationId,
+    };
+  }
+
+  if (!UUID.test(requestedOrganizationId)) {
+    return {
+      supabase,
+      user,
+      organizationId: null,
+    };
+  }
+
+  const { data: organization, error: organizationError } = await supabase
+    .from("organizations")
+    .select("id")
+    .eq("id", requestedOrganizationId)
+    .maybeSingle();
+  if (organizationError) {
+    throw new Error(`Could not load requested organization: ${organizationError.message}`);
+  }
+
   return {
     supabase,
     user,
-    organizationId: pickActiveOrganization(memberships ?? []),
+    organizationId: organization?.id ?? null,
   };
 }

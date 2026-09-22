@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireActiveOrganization } from "../../../../lib/organization-access";
+import { getPlatformRole } from "../../../../lib/auth-role";
 
-export async function GET() {
+export async function GET(request?: Request) {
   try {
-    const { supabase, user, organizationId } = await requireActiveOrganization();
+    const requestedOrganizationId = request
+      ? new URL(request.url).searchParams.get("organization_id")
+      : null;
+    const { supabase, user, organizationId } = await requireActiveOrganization(requestedOrganizationId);
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -16,7 +20,8 @@ export async function GET() {
       );
     }
 
-    const [membershipResult, organizationResult, stagesResult] = await Promise.all([
+    const isPlatformAdmin = getPlatformRole(user) === "admin";
+    const [membershipResult, organizationResult, stagesResult, organizationsResult] = await Promise.all([
       supabase
         .from("organization_memberships")
         .select("organization_id, role")
@@ -33,13 +38,19 @@ export async function GET() {
         .select("id, name, position")
         .eq("organization_id", organizationId)
         .order("position", { ascending: true }),
+      isPlatformAdmin
+        ? supabase
+          .from("organizations")
+          .select("id, name")
+          .order("name", { ascending: true })
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
-    if (membershipResult.error || organizationResult.error || stagesResult.error) {
+    if (membershipResult.error || organizationResult.error || stagesResult.error || organizationsResult.error) {
       return NextResponse.json({ error: "Could not load CRM context" }, { status: 500 });
     }
 
-    if (!membershipResult.data || !organizationResult.data) {
+    if ((!membershipResult.data && !isPlatformAdmin) || !organizationResult.data) {
       return NextResponse.json({ error: "Organization not found" }, { status: 404 });
     }
 
@@ -47,10 +58,11 @@ export async function GET() {
     return NextResponse.json({
       organization: organizationResult.data,
       membership: {
-        organizationId: membershipResult.data.organization_id,
-        role: membershipResult.data.role,
+        organizationId,
+        role: membershipResult.data?.role ?? "admin",
       },
       stages: stagesResult.data ?? [],
+      organizations: organizationsResult.data ?? [],
       user: {
         id: user.id,
         email: user.email ?? null,

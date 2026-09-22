@@ -303,6 +303,24 @@ $$;
 REVOKE ALL ON FUNCTION public.can_access_organization(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.can_access_organization(uuid) TO authenticated, service_role;
 
+ALTER TABLE public.facebook_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ad_accounts ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can manage own tokens" ON public.facebook_tokens;
+DROP POLICY IF EXISTS "organization members manage facebook tokens" ON public.facebook_tokens;
+DROP POLICY IF EXISTS "Users can manage own ad accounts" ON public.ad_accounts;
+DROP POLICY IF EXISTS "organization members manage ad accounts" ON public.ad_accounts;
+
+CREATE POLICY "organization members manage facebook tokens"
+  ON public.facebook_tokens FOR ALL
+  USING (public.can_access_organization(organization_id))
+  WITH CHECK (public.can_access_organization(organization_id));
+
+CREATE POLICY "organization members manage ad accounts"
+  ON public.ad_accounts FOR ALL
+  USING (public.can_access_organization(organization_id))
+  WITH CHECK (public.can_access_organization(organization_id));
+
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.organization_memberships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_pipeline_stages ENABLE ROW LEVEL SECURITY;

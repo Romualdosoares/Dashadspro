@@ -92,6 +92,7 @@ describe("CRM API routes", () => {
       organization: { id: organizationId, name: "Acme", slug: "acme" },
       membership: { organizationId, role: "owner" },
       stages: [{ id: stageId, name: "Novo lead", position: 1 }],
+      organizations: [],
       user: {
         id: "user-1",
         email: "maria@example.com",
@@ -100,6 +101,70 @@ describe("CRM API routes", () => {
       },
     });
     expect(stages.order).toHaveBeenCalledWith("position", { ascending: true });
+  });
+
+  it("returns RLS-visible organization choices only for a platform admin", async () => {
+    const membership = query({ data: null, error: null });
+    const activeOrganization = query({ data: { id: organizationId, name: "Acme", slug: "acme" }, error: null });
+    const stages = query({ data: [], error: null });
+    const organizations = query({
+      data: [
+        { id: organizationId, name: "Acme" },
+        { id: "550e8400-e29b-41d4-a716-446655440010", name: "Beta" },
+      ],
+      error: null,
+    });
+    let organizationQueries = 0;
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === "organization_memberships") return membership;
+        if (table === "crm_pipeline_stages") return stages;
+        if (table === "organizations") {
+          organizationQueries += 1;
+          return organizationQueries === 1 ? activeOrganization : organizations;
+        }
+        return undefined;
+      }),
+    };
+    requireActiveOrganization.mockResolvedValue({
+      ...activeAccess(supabase),
+      user: { id: "admin-1", app_metadata: { role: "admin" } },
+    });
+
+    const response = await getContext(new Request(`http://localhost/api/crm/context?organization_id=${organizationId}`));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      membership: { organizationId, role: "admin" },
+      organizations: [
+        { id: organizationId, name: "Acme" },
+        { id: "550e8400-e29b-41d4-a716-446655440010", name: "Beta" },
+      ],
+    });
+    expect(organizations.order).toHaveBeenCalledWith("name", { ascending: true });
+  });
+
+  it("forwards organization selection from CRM route query parameters", async () => {
+    const from = vi.fn();
+    requireActiveOrganization.mockResolvedValue(activeAccess({ from }));
+    const requestedOrganizationId = "550e8400-e29b-41d4-a716-446655440010";
+
+    await getLeads(new Request(`http://localhost/api/crm/leads?organization_id=${requestedOrganizationId}`));
+    await createLead(new Request(`http://localhost/api/crm/leads?organization_id=${requestedOrganizationId}`, {
+      method: "POST",
+      body: JSON.stringify({ name: "Maria Silva", email: "maria@example.com", source: "manual" }),
+    }));
+    await updateLead(
+      new Request(`http://localhost/api/crm/leads/${leadId}?organization_id=${requestedOrganizationId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ stage_id: stageId }),
+      }),
+      { params: Promise.resolve({ leadId }) },
+    );
+
+    expect(requireActiveOrganization).toHaveBeenNthCalledWith(1, requestedOrganizationId);
+    expect(requireActiveOrganization).toHaveBeenNthCalledWith(2, requestedOrganizationId);
+    expect(requireActiveOrganization).toHaveBeenNthCalledWith(3, requestedOrganizationId);
   });
 
   it("returns organization-scoped CRM leads with contact and stage data", async () => {

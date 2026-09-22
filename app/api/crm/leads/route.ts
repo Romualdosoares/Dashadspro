@@ -91,9 +91,13 @@ async function enrichContact(
   return error ? "database" : "ok";
 }
 
-export async function GET() {
+function requestedOrganizationId(request?: Request): string | null {
+  return request ? new URL(request.url).searchParams.get("organization_id") : null;
+}
+
+export async function GET(request?: Request) {
   try {
-    const { supabase, user, organizationId } = await requireActiveOrganization();
+    const { supabase, user, organizationId } = await requireActiveOrganization(requestedOrganizationId(request));
     const errorResponse = accessError(user, organizationId);
     if (errorResponse) return errorResponse;
     if (!organizationId) {
@@ -136,7 +140,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { supabase, user, organizationId } = await requireActiveOrganization();
+    const { supabase, user, organizationId } = await requireActiveOrganization(requestedOrganizationId(request));
     const errorResponse = accessError(user, organizationId);
     if (errorResponse) return errorResponse;
     if (!organizationId) {

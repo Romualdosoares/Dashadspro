@@ -85,6 +85,13 @@ describe("CRM Phase 1 schema migration", () => {
     expect(sql).toMatch(/auth\.jwt\(\)\s*->\s*'app_metadata'\s*->>\s*'role'\s*=\s*'admin'/i);
     expect(sql).toMatch(/REVOKE ALL ON FUNCTION public\.can_access_organization\(uuid\) FROM PUBLIC/i);
     expect(sql).toMatch(/GRANT EXECUTE ON FUNCTION public\.can_access_organization\(uuid\) TO authenticated, service_role/i);
+    for (const [table, legacyPolicy, organizationPolicy] of [
+      ["facebook_tokens", "Users can manage own tokens", "organization members manage facebook tokens"],
+      ["ad_accounts", "Users can manage own ad accounts", "organization members manage ad accounts"],
+    ]) {
+      expect(sql).toMatch(new RegExp(`DROP POLICY IF EXISTS "${legacyPolicy}" ON public\\.${table}`, "i"));
+      expect(sql).toMatch(new RegExp(`CREATE POLICY "${organizationPolicy}"[\\s\\S]*?ON public\\.${table} FOR ALL[\\s\\S]*?USING \\(public\\.can_access_organization\\(organization_id\\)\\)[\\s\\S]*?WITH CHECK \\(public\\.can_access_organization\\(organization_id\\)\\)`, "i"));
+    }
 
     for (const table of [
       "organizations",
