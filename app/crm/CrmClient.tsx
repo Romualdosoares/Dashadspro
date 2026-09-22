@@ -19,6 +19,7 @@ import {
 } from "@/lib/crm-client-state";
 import { buildPipelineColumns } from "@/lib/crm-pipeline";
 import type { CrmLead, CrmStage, LeadSource } from "@/lib/crm-types";
+import ClientFeatureNavigation from "@/components/ClientFeatureNavigation";
 
 const sourceLabels: Record<LeadSource, string> = {
   manual: "Manual",
@@ -156,12 +157,13 @@ export default function CrmClient({
   return (
     <main className="min-h-screen bg-[#0B0C0A] font-mono text-[#E8EDE8]">
       <div className="mx-auto max-w-[1680px] px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <header className="flex flex-col gap-4 border border-[#2A2F2A] bg-[#10120F] p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.16em] text-[#00E676]">CRM</p>
-            <h1 className="mt-1 text-xl font-semibold tracking-tight text-white sm:text-2xl">Pipeline de leads</h1>
-          </div>
-          <div className="flex flex-wrap items-center gap-3 text-xs text-[#AAB2AA]">
+        <header className="border border-[#2A2F2A] bg-[#10120F] p-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.16em] text-[#00E676]">CRM</p>
+              <h1 className="mt-1 text-xl font-semibold tracking-tight text-white sm:text-2xl">Pipeline de leads</h1>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-xs text-[#AAB2AA]">
             {shouldShowOrganizationSelector(organizations) ? (
               <label className="grid gap-1 text-xs text-[#AAB2AA]">
                 Organização ativa
@@ -191,7 +193,9 @@ export default function CrmClient({
               <LayoutDashboard size={15} aria-hidden="true" />
               Dashboard
             </a>
+            </div>
           </div>
+          <ClientFeatureNavigation className="mt-4 border-t border-[#2A2F2A] pt-3" />
         </header>
 
         <section className="mt-4 border border-[#2A2F2A] bg-[#10120F] p-4" aria-labelledby="new-lead-title">

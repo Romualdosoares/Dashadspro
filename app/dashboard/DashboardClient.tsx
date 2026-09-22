@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import ClientFeatureNavigation from "@/components/ClientFeatureNavigation";
 
 interface AccountInfo {
   adAccountId: string | null;
@@ -25,5 +26,10 @@ const DashAdsPro = dynamic(() => import("@/DashAdsPro"), {
 });
 
 export default function DashboardClient({ accountInfo }: { accountInfo: AccountInfo }) {
-  return <DashAdsPro accountInfo={accountInfo} />;
+  return (
+    <DashAdsPro
+      accountInfo={accountInfo}
+      headerNavigation={<ClientFeatureNavigation className="mt-3 border-t border-[#1A1E1A] pt-3" />}
+    />
+  );
 }
