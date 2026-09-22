@@ -16,4 +16,5 @@ tsconfig.tsbuildinfo
 
 .vercel
 .worktrees/
+.superpowers/
 .deploy-Dashadspro.tar
