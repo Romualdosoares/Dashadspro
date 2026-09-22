@@ -57,8 +57,9 @@ export default async function AdminProductsPage({
       id: "site-builder",
       name: "Criador de Sites",
       description: "Criação e publicação de páginas para campanhas.",
-      status: "Não configurado",
-      detail: "Nenhuma rota de produto está integrada neste projeto.",
+      status: "Disponível",
+      detail: "Rota protegida em /sites. O criador está em preparação.",
+      href: "/sites",
       icon: PanelsTopLeft,
     },
     {
