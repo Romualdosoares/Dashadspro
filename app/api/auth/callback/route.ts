@@ -42,7 +42,7 @@ export async function GET(request: Request) {
     }
 
     const { session, user } = data;
-    const isFacebook = user.app_metadata?.provider === "facebook";
+    const isFacebook = Boolean(session.provider_token) || user.app_metadata?.provider === "facebook";
 
     if (isFacebook) {
       const adminClient = createAdminClient();
